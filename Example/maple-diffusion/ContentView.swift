@@ -1,10 +1,12 @@
 import SwiftUI
+import MapleDiffusion
 
 struct ContentView: View {
 #if os(iOS)
     let mapleDiffusion = MapleDiffusion(saveMemoryButBeSlower: true)
 #else
-    let mapleDiffusion = MapleDiffusion(saveMemoryButBeSlower: false)
+    let mapleDiffusion = MapleDiffusion(saveMemoryButBeSlower: false, modelFolder: URL(fileURLWithPath: "/Users/mortenjust/Library/Application Support/Photato/bins"))
+    
 #endif
     let dispatchQueue = DispatchQueue(label: "Generation")
     @State var steps: Float = 20

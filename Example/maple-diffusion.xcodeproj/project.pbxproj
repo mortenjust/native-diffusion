@@ -11,8 +11,7 @@
 		97B171B128F23B7700B97242 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97B171B028F23B7700B97242 /* ContentView.swift */; };
 		97B171B328F23B7800B97242 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97B171B228F23B7800B97242 /* Assets.xcassets */; };
 		97B171B728F23B7800B97242 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97B171B628F23B7800B97242 /* Preview Assets.xcassets */; };
-		97B171BE28F23BBC00B97242 /* MapleDiffusion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97B171BD28F23BBC00B97242 /* MapleDiffusion.swift */; };
-		97B171C028F23C7D00B97242 /* bins in Resources */ = {isa = PBXBuildFile; fileRef = 97B171BF28F23C7D00B97242 /* bins */; };
+		C892C47228F587D500D00540 /* MapleDiffusion in Frameworks */ = {isa = PBXBuildFile; productRef = C892C47128F587D500D00540 /* MapleDiffusion */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,8 +21,7 @@
 		97B171B228F23B7800B97242 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97B171B428F23B7800B97242 /* maple_diffusion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = maple_diffusion.entitlements; sourceTree = "<group>"; };
 		97B171B628F23B7800B97242 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		97B171BD28F23BBC00B97242 /* MapleDiffusion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapleDiffusion.swift; sourceTree = "<group>"; };
-		97B171BF28F23C7D00B97242 /* bins */ = {isa = PBXFileReference; lastKnownFileType = folder; path = bins; sourceTree = "<group>"; };
+		C83789EF28F584EC001C7844 /* maple-diffusion */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = "maple-diffusion"; path = ../..; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -31,6 +29,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C892C47228F587D500D00540 /* MapleDiffusion in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -41,7 +40,9 @@
 			isa = PBXGroup;
 			children = (
 				97B171AD28F23B7700B97242 /* maple-diffusion */,
+				C83789F028F584F8001C7844 /* Packages */,
 				97B171AC28F23B7700B97242 /* Products */,
+				C892C47028F587D500D00540 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -58,8 +59,6 @@
 			children = (
 				97B171AE28F23B7700B97242 /* maple_diffusionApp.swift */,
 				97B171B028F23B7700B97242 /* ContentView.swift */,
-				97B171BD28F23BBC00B97242 /* MapleDiffusion.swift */,
-				97B171BF28F23C7D00B97242 /* bins */,
 				97B171B228F23B7800B97242 /* Assets.xcassets */,
 				97B171B428F23B7800B97242 /* maple_diffusion.entitlements */,
 				97B171B528F23B7800B97242 /* Preview Content */,
@@ -73,6 +72,21 @@
 				97B171B628F23B7800B97242 /* Preview Assets.xcassets */,
 			);
 			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		C83789F028F584F8001C7844 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				C83789EF28F584EC001C7844 /* maple-diffusion */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		C892C47028F587D500D00540 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -91,6 +105,9 @@
 			dependencies = (
 			);
 			name = "maple-diffusion";
+			packageProductDependencies = (
+				C892C47128F587D500D00540 /* MapleDiffusion */,
+			);
 			productName = "maple-diffusion";
 			productReference = 97B171AB28F23B7700B97242 /* maple-diffusion.app */;
 			productType = "com.apple.product-type.application";
@@ -133,7 +150,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				97B171C028F23C7D00B97242 /* bins in Resources */,
 				97B171B728F23B7800B97242 /* Preview Assets.xcassets in Resources */,
 				97B171B328F23B7800B97242 /* Assets.xcassets in Resources */,
 			);
@@ -147,7 +163,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				97B171B128F23B7700B97242 /* ContentView.swift in Sources */,
-				97B171BE28F23BBC00B97242 /* MapleDiffusion.swift in Sources */,
 				97B171AF28F23B7700B97242 /* maple_diffusionApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -274,7 +289,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"maple-diffusion/Preview Content\"";
-				DEVELOPMENT_TEAM = MGZW3M7DL4;
+				DEVELOPMENT_TEAM = UDGLB23X37;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Maple Diffusion";
@@ -294,6 +309,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 12.3;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.madebyollin.maple-diffusion";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = app.otato.diffusion;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -313,7 +329,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"maple-diffusion/Preview Content\"";
-				DEVELOPMENT_TEAM = MGZW3M7DL4;
+				DEVELOPMENT_TEAM = UDGLB23X37;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Maple Diffusion";
@@ -333,6 +349,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 12.3;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.madebyollin.maple-diffusion";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = app.otato.diffusion;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -364,6 +381,13 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C892C47128F587D500D00540 /* MapleDiffusion */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MapleDiffusion;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 97B171A328F23B7700B97242 /* Project object */;
 }

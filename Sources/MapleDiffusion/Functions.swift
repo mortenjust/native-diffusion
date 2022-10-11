@@ -7,6 +7,8 @@ import Foundation
 // for memory usage in many places (tagged with MEM-HACK) in order to
 // stay under the limit and minimize probability of oom.
 
+var modelFolder : URL! // TODO: Make optional, add safety
+
 func makeGraph() -> MPSGraph {
     let graph = MPSGraph()
     graph.options = MPSGraphOptions.none
@@ -14,8 +16,12 @@ func makeGraph() -> MPSGraph {
 }
 
 func loadConstant(graph: MPSGraph, name: String, shape: [NSNumber], fp32: Bool = false) -> MPSGraphTensor {
+    
     let numels = shape.map({$0.intValue}).reduce(1, *)
-    let fileUrl: URL = Bundle.main.url(forResource: "bins/" + name + (fp32 ? "_fp32" : ""), withExtension: ".bin")!
+    
+    let fileUrl: URL = modelFolder.appendingPathComponent(name + (fp32 ? "_fp32" : "")).appendingPathExtension("bin")
+//    let fileUrl: URL = Bundle.main.url(forResource: "bins/" + name + (fp32 ? "_fp32" : ""), withExtension: ".bin")!
+    
     let data: Data = try! Data(contentsOf: fileUrl, options: Data.ReadingOptions.alwaysMapped)
     let expectedCount = numels * (fp32 ? 4 : 2)
     assert(data.count == expectedCount, "Mismatch between byte count of data \(data.count) and expected size \(expectedCount) for \(numels) els in \(fileUrl)")
@@ -38,6 +44,7 @@ func makeUpsampleNearest(graph: MPSGraph, xIn: MPSGraphTensor, scaleFactor: Int=
     return graph.resize(xIn, size: [NSNumber(value:xIn.shape![1].intValue * scaleFactor), NSNumber(value:xIn.shape![2].intValue * scaleFactor)], mode: MPSGraphResizeMode.nearest, centerResult: true, alignCorners: false, layout: MPSGraphTensorNamedDataLayout.NHWC, name: nil)
 }
 
+@available(macOS 12.3, *)
 func makeGroupNorm(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     var x = xIn
     if (xIn.shape!.count == 3) {
@@ -59,10 +66,12 @@ func makeSwish(graph: MPSGraph, xIn: MPSGraphTensor) -> MPSGraphTensor {
     return graph.multiplication(xIn, graph.sigmoid(with: xIn, name: nil), name: nil)
 }
 
+@available(macOS 12.3, *)
 func makeGroupNormSwish(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     return makeSwish(graph: graph, xIn: makeGroupNorm(graph: graph, xIn: xIn, name: name))
 }
 
+@available(macOS 12.3, *)
 func makeDecoderResBlock(graph: MPSGraph, xIn: MPSGraphTensor, name: String, outChannels: NSNumber) -> MPSGraphTensor {
     var x = xIn
     x = makeGroupNormSwish(graph: graph, xIn: x, name: name + ".norm1")
@@ -76,6 +85,7 @@ func makeDecoderResBlock(graph: MPSGraph, xIn: MPSGraphTensor, name: String, out
     return graph.addition(x, xIn, name: "skip")
 }
 
+@available(macOS 12.3, *)
 func makeDecoderAttention(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     var x = makeGroupNorm(graph: graph, xIn: xIn, name: name + ".norm")
     let c = x.shape![3]
@@ -103,6 +113,7 @@ func makeByteConverter(graph: MPSGraph, xIn: MPSGraphTensor) -> MPSGraphTensor {
     return graph.concatTensors([x, alpha], dimension: 3, name: nil)
 }
 
+@available(macOS 12.3, *)
 func makeDecoder(graph: MPSGraph, xIn: MPSGraphTensor) -> MPSGraphTensor {
     var x = xIn
     let name = "first_stage_model.decoder"
@@ -174,6 +185,7 @@ func makeTimeEmbed(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGra
     return makeLinear(graph: graph, xIn: x, name: name + ".2", outChannels: 1280)
 }
 
+@available(macOS 12.3, *)
 func makeUNetResBlock(graph: MPSGraph, xIn: MPSGraphTensor, embIn: MPSGraphTensor, name: String, inChannels: NSNumber, outChannels: NSNumber) -> MPSGraphTensor {
     var x = xIn
     x = makeGroupNormSwish(graph: graph, xIn: x, name: name + ".in_layers.0")
@@ -274,6 +286,7 @@ func makeBasicTransformerBlock(graph: MPSGraph, xIn: MPSGraphTensor, name: Strin
     return graph.addition(ff, x, name: nil)
 }
 
+@available(macOS 12.3, *)
 func makeSpatialTransformerBlock(graph: MPSGraph, xIn: MPSGraphTensor, name: String, contextIn: MPSGraphTensor, saveMemory: Bool) -> MPSGraphTensor {
     let n, h, w, c: NSNumber
     (n, h, w, c) = (xIn.shape![0], xIn.shape![1], xIn.shape![2], xIn.shape![3])
@@ -287,6 +300,7 @@ func makeSpatialTransformerBlock(graph: MPSGraph, xIn: MPSGraphTensor, name: Str
     return graph.addition(x, xIn, name: nil)
 }
 
+@available(macOS 12.3, *)
 func makeOutputBlock(graph: MPSGraph, xIn: MPSGraphTensor, embIn: MPSGraphTensor, condIn: MPSGraphTensor, inChannels: NSNumber, outChannels: NSNumber, dHead: NSNumber, name: String, saveMemory: Bool, spatialTransformer: Bool = true, upsample: Bool = false) -> MPSGraphTensor {
     var x = xIn
     x = makeUNetResBlock(graph: graph, xIn: x, embIn: embIn, name: name + ".0", inChannels: inChannels, outChannels: outChannels)
@@ -301,6 +315,7 @@ func makeOutputBlock(graph: MPSGraph, xIn: MPSGraphTensor, embIn: MPSGraphTensor
 }
 
 
+@available(macOS 12.3, *)
 func makeUNetAnUnexpectedJourney(graph: MPSGraph, xIn: MPSGraphTensor, tembIn: MPSGraphTensor, condIn: MPSGraphTensor, name: String, saveMemory: Bool = true) -> [MPSGraphTensor] {
     let emb = makeTimeEmbed(graph: graph, xIn: tembIn, name: name + ".time_embed")
     
@@ -367,6 +382,7 @@ func makeUNetAnUnexpectedJourney(graph: MPSGraph, xIn: MPSGraphTensor, tembIn: M
     return savedInputs + [emb] + [x]
 }
 
+@available(macOS 12.3, *)
 func makeUNetTheDesolationOfSmaug(graph: MPSGraph, savedInputsIn: [MPSGraphTensor], name: String, saveMemory: Bool = true) -> [MPSGraphTensor] {
     var savedInputs = savedInputsIn
     let condIn = savedInputs.popLast()!
@@ -392,6 +408,7 @@ func makeUNetTheDesolationOfSmaug(graph: MPSGraph, savedInputsIn: [MPSGraphTenso
     return savedInputs + [emb] + [x]
 }
 
+@available(macOS 12.3, *)
 func makeUNetTheBattleOfTheFiveArmies(graph: MPSGraph, savedInputsIn: [MPSGraphTensor], name: String, saveMemory: Bool = true) -> MPSGraphTensor {
     var savedInputs = savedInputsIn
     let condIn = savedInputs.popLast()!
@@ -439,6 +456,7 @@ func makeSqrtOneMinus(graph: MPSGraph, xIn: MPSGraphTensor) -> MPSGraphTensor {
     return graph.squareRoot(with: graph.subtraction(graph.constant(1.0, dataType: MPSDataType.float16), xIn, name: nil), name: nil)
 }
 
+@available(macOS 12.3, *)
 func makeDiffusionStep(graph: MPSGraph, xIn: MPSGraphTensor, etaUncondIn: MPSGraphTensor, etaCondIn: MPSGraphTensor, tIn: MPSGraphTensor, tPrevIn: MPSGraphTensor, guidanceScaleIn: MPSGraphTensor) -> MPSGraphTensor {
     
     // superconditioning
@@ -462,89 +480,6 @@ func makeDiffusionStep(graph: MPSGraph, xIn: MPSGraphTensor, etaUncondIn: MPSGra
     return graph.addition(xPrevBase, dirX, name: nil)
 }
 
-class BPETokenizer {
-    // why didn't they just byte-encode
-    func whitespaceClean(s: String) -> String { return s.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines) }
-    
-    func getPairs(s: [String]) -> Set<String> { return Set<String>((1..<s.count).map({(s[$0 - 1] + " " + s[$0])})) }
-    
-    let pat: NSRegularExpression = try! NSRegularExpression(pattern: #"'s|'t|'re|'ve|'m|'ll|'d|[^\s]+"#, options: NSRegularExpression.Options.caseInsensitive)
-    var bytesToUnicode = [Int:Character]()
-    var ranks = [String:Int]()
-    var vocab: [String:Int]
-    public init() {
-        var vocabList = [String]()
-        for i in Array(33...126) + Array(161...172) + Array(174...255) {
-            bytesToUnicode[i] = Character(Unicode.Scalar(i)!)
-            vocabList.append(String(Unicode.Scalar(i)!))
-        }
-        for i in 0...255 {
-            if (bytesToUnicode[i] != nil) { continue }
-            bytesToUnicode[i] = Character(Unicode.Scalar(256 + bytesToUnicode.count - 188)!)
-            vocabList.append(String(bytesToUnicode[i]!))
-        }
-        vocabList += vocabList.map({$0 + "</w>"})
-        let vocabFile = try! String(contentsOf: Bundle.main.url(forResource: "bins/bpe_simple_vocab_16e6", withExtension: "txt")!)
-        for (i, m) in vocabFile.split(separator: "\n")[1..<48_895].enumerated() {
-            ranks[String(m)] = i
-            vocabList.append(m.split(separator: " ").joined(separator: ""))
-        }
-        vocab = vocabList.enumerated().reduce(into: [:], {$0[$1.element] = $1.offset})
-    }
-    
-    func encodeToken(s: String) -> [Int] {
-        let token = String(s.utf8.map{bytesToUnicode[Int($0)]!})
-        var word = token[..<token.index(before: token.endIndex)].map{String($0)} + [token.suffix(from: token.index(before: token.endIndex)) + "</w>"]
-        var pairs = getPairs(s: Array(word))
-        var mergedWordTokens = [token + "</w>"]
-        var count = 0
-        if (!pairs.isEmpty) {
-            while (true) {
-                count += 1
-                assert(count < 8192, "encodeToken is trapped in a token factory for input \(s)")
-                let highestRankedBigram = pairs.min(by: {ranks[$0, default: Int.max] < ranks[$1, default: Int.max]})!
-                if (ranks[highestRankedBigram] == nil) { break }
-                let fs = highestRankedBigram.split(separator: " ")
-                let (first, second) = (String(fs[0]), String(fs[1]))
-                var (newWord, i) = ([String](), 0)
-                while (i < word.count) {
-                    let j = word[i..<word.count].firstIndex(of: first)
-                    if (j == nil) {
-                        newWord.append(contentsOf: word[i..<word.count])
-                        break
-                    } else {
-                        newWord.append(contentsOf: word[i..<j!])
-                        i = j!
-                    }
-                    if (word[i] == first && word[i + 1] == second) {
-                        newWord.append(first + second)
-                        i += 2
-                    } else {
-                        newWord.append(word[i])
-                        i += 1
-                    }
-                }
-                word = newWord
-                if (word.count == 1) {
-                    break
-                } else {
-                    pairs = getPairs(s: word)
-                }
-            }
-            mergedWordTokens = word
-        }
-        return mergedWordTokens.map{ vocab[$0]! }
-    }
-    
-    public func encode(s: String) -> [Int] {
-        let ns = NSString(string: whitespaceClean(s: s.lowercased()))
-        var bpe: [Int] = []
-        for match in pat.matches(in: String(ns), range: NSRange(location: 0, length: ns.length)) {
-            bpe.append(contentsOf: encodeToken(s: ns.substring(with: match.range)))
-        }
-        return [49406] + bpe[..<min(75, bpe.count)] + [Int](repeating: 49407, count: 76 - bpe.count)
-    }
-}
 
 func makeTextAttention(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     let nHeads: NSNumber = 12
@@ -595,6 +530,7 @@ func makeTextEncoder(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSG
     return x
 }
 
+@available(macOS 12.3, *)
 func makeTextEmbeddings(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     var tokenEmbeddings = loadConstant(graph: graph, name: name + ".token_embedding.weight", shape: [1, 49408, 768])
     tokenEmbeddings = graph.broadcast(tokenEmbeddings, shape: [2, 49408, 768], name: nil)
@@ -604,6 +540,7 @@ func makeTextEmbeddings(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> M
     return graph.addition(embeddings, positionEmbeddings, name: nil)
 }
 
+@available(macOS 12.3, *)
 func makeTextGuidance(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     var x = makeTextEmbeddings(graph: graph, xIn: xIn, name: name + ".embeddings")
     x = makeTextEncoder(graph: graph, xIn: x, name: name + ".encoder")
@@ -617,280 +554,7 @@ func makeAuxUpsampler(graph: MPSGraph, xIn: MPSGraphTensor) -> MPSGraphTensor {
     return makeByteConverter(graph: graph, xIn: x)
 }
 
-class MapleDiffusion {
-    let device: MTLDevice
-    let graphDevice: MPSGraphDevice
-    let commandQueue: MTLCommandQueue
-    let saveMemory: Bool
-    
-    // text tokenization
-    let tokenizer: BPETokenizer
-    
-    // text guidance
-    var textGuidanceExecutable: MPSGraphExecutable?
-    
-    // time embedding
-    let tembGraph: MPSGraph
-    let tembTIn: MPSGraphTensor
-    let tembOut: MPSGraphTensor
-    
-    // diffusion
-    let diffGraph: MPSGraph
-    let diffGuidanceScaleIn: MPSGraphTensor
-    let diffXIn: MPSGraphTensor
-    let diffEtaUncondIn: MPSGraphTensor
-    let diffEtaCondIn: MPSGraphTensor
-    let diffTIn: MPSGraphTensor
-    let diffTPrevIn: MPSGraphTensor
-    let diffOut: MPSGraphTensor
-    let diffAuxOut: MPSGraphTensor
-    
-    // unet
-    // MEM-HACK: split into subgraphs
-    var unetAnUnexpectedJourneyExecutable: MPSGraphExecutable?
-    var anUnexpectedJourneyShapes = [[NSNumber]]()
-    var unetTheDesolationOfSmaugExecutable: MPSGraphExecutable?
-    var theDesolationOfSmaugShapes = [[NSNumber]]()
-    var theDesolationOfSmaugIndices = [MPSGraphTensor: Int]()
-    var unetTheBattleOfTheFiveArmiesExecutable: MPSGraphExecutable?
-    var theBattleOfTheFiveArmiesIndices = [MPSGraphTensor: Int]()
-    
-    var width: NSNumber = 64
-    var height: NSNumber = 64
-    
-    public init(saveMemoryButBeSlower: Bool = true) {
-        saveMemory = saveMemoryButBeSlower
-        device = MTLCreateSystemDefaultDevice()!
-        graphDevice = MPSGraphDevice(mtlDevice: device)
-        commandQueue = device.makeCommandQueue()!
-        
-        // text tokenization
-        tokenizer = BPETokenizer()
-        
-        // time embedding
-        tembGraph = makeGraph()
-        tembTIn = tembGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        tembOut = makeTimeFeatures(graph: tembGraph, tIn: tembTIn)
-        
-        // diffusion
-        diffGraph = makeGraph()
-        diffXIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-        diffEtaUncondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-        diffEtaCondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-        diffTIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        diffTPrevIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        diffGuidanceScaleIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.float16, name: nil)
-        diffOut = makeDiffusionStep(graph: diffGraph, xIn: diffXIn, etaUncondIn: diffEtaUncondIn, etaCondIn: diffEtaCondIn, tIn: diffTIn, tPrevIn: diffTPrevIn, guidanceScaleIn: diffGuidanceScaleIn)
-        diffAuxOut = makeAuxUpsampler(graph: diffGraph, xIn: diffOut)
-        
-        // text guidance
-        initTextGuidance()
-        
-        // unet
-        initAnUnexpectedJourney()
-        initTheDesolationOfSmaug()
-        initTheBattleOfTheFiveArmies()
-    }
-    
-    private func initTextGuidance() {
-        let graph = makeGraph()
-        let textGuidanceIn = graph.placeholder(shape: [2, 77], dataType: MPSDataType.int32, name: nil)
-        let textGuidanceOut = makeTextGuidance(graph: graph, xIn: textGuidanceIn, name: "cond_stage_model.transformer.text_model")
-        let textGuidanceOut0 = graph.sliceTensor(textGuidanceOut, dimension: 0, start: 0, length: 1, name: nil)
-        let textGuidanceOut1 = graph.sliceTensor(textGuidanceOut, dimension: 0, start: 1, length: 1, name: nil)
-        textGuidanceExecutable = graph.compile(with: graphDevice, feeds: [textGuidanceIn: MPSGraphShapedType(shape: textGuidanceIn.shape, dataType: MPSDataType.int32)], targetTensors: [textGuidanceOut0, textGuidanceOut1], targetOperations: nil, compilationDescriptor: nil)
-    }
-    
-    private func initAnUnexpectedJourney() {
-        let graph = makeGraph()
-        let xIn = graph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-        let condIn = graph.placeholder(shape: [saveMemory ? 1 : 2, 77, 768], dataType: MPSDataType.float16, name: nil)
-        let tembIn = graph.placeholder(shape: [1, 320], dataType: MPSDataType.float16, name: nil)
-        let unetOuts = makeUNetAnUnexpectedJourney(graph: graph, xIn: xIn, tembIn: tembIn, condIn: condIn, name: "model.diffusion_model", saveMemory: saveMemory)
-        let unetFeeds = [xIn, condIn, tembIn].reduce(into: [:], {$0[$1] = MPSGraphShapedType(shape: $1.shape!, dataType: $1.dataType)})
-        unetAnUnexpectedJourneyExecutable = graph.compile(with: graphDevice, feeds: unetFeeds, targetTensors: unetOuts, targetOperations: nil, compilationDescriptor: nil)
-        anUnexpectedJourneyShapes = unetOuts.map{$0.shape!}
-    }
-    
-    private func initTheDesolationOfSmaug() {
-        let graph = makeGraph()
-        let condIn = graph.placeholder(shape: [saveMemory ? 1 : 2, 77, 768], dataType: MPSDataType.float16, name: nil)
-        let placeholders = anUnexpectedJourneyShapes.map{graph.placeholder(shape: $0, dataType: MPSDataType.float16, name: nil)} + [condIn]
-        theDesolationOfSmaugIndices.removeAll()
-        for i in 0..<placeholders.count {
-            theDesolationOfSmaugIndices[placeholders[i]] = i
-        }
-        let feeds = placeholders.reduce(into: [:], {$0[$1] = MPSGraphShapedType(shape: $1.shape!, dataType: $1.dataType)})
-        let unetOuts = makeUNetTheDesolationOfSmaug(graph: graph, savedInputsIn: placeholders, name: "model.diffusion_model", saveMemory: saveMemory)
-        unetTheDesolationOfSmaugExecutable = graph.compile(with: graphDevice, feeds: feeds, targetTensors: unetOuts, targetOperations: nil, compilationDescriptor: nil)
-        theDesolationOfSmaugShapes = unetOuts.map{$0.shape!}
-    }
-    
-    private func initTheBattleOfTheFiveArmies() {
-        let graph = makeGraph()
-        let condIn = graph.placeholder(shape: [saveMemory ? 1 : 2, 77, 768], dataType: MPSDataType.float16, name: nil)
-        let unetPlaceholders = theDesolationOfSmaugShapes.map{graph.placeholder(shape: $0, dataType: MPSDataType.float16, name: nil)} + [condIn]
-        theBattleOfTheFiveArmiesIndices.removeAll()
-        for i in 0..<unetPlaceholders.count {
-            theBattleOfTheFiveArmiesIndices[unetPlaceholders[i]] = i
-        }
-        let feeds = unetPlaceholders.reduce(into: [:], {$0[$1] = MPSGraphShapedType(shape: $1.shape!, dataType: $1.dataType)})
-        let unetOut = makeUNetTheBattleOfTheFiveArmies(graph: graph, savedInputsIn: unetPlaceholders, name: "model.diffusion_model", saveMemory: saveMemory)
-        unetTheBattleOfTheFiveArmiesExecutable = graph.compile(with: graphDevice, feeds: feeds, targetTensors: [unetOut], targetOperations: nil, compilationDescriptor: nil)
-    }
-    
-    private func randomLatent(seed: Int) -> MPSGraphTensorData {
-        let graph = makeGraph()
-        let out = graph.randomTensor(withShape: [1, height, width, 4], descriptor: MPSGraphRandomOpDescriptor(distribution: .normal, dataType: .float16)!, seed: seed, name: nil)
-        return graph.run(feeds: [:], targetTensors: [out], targetOperations: nil)[out]!
-    }
-    
-    private func runTextGuidance(baseTokens: [Int], tokens: [Int]) -> (MPSGraphTensorData, MPSGraphTensorData) {
-        let tokensData = (baseTokens + tokens).map({Int32($0)}).withUnsafeBufferPointer {Data(buffer: $0)}
-        let tokensMPSData = MPSGraphTensorData(device: graphDevice, data: tokensData, shape: [2, 77], dataType: MPSDataType.int32)
-        let res = textGuidanceExecutable!.run(with: commandQueue, inputs: [tokensMPSData], results: nil, executionDescriptor: nil)
-        return (res[0], res[1])
-    }
-    
-    private func loadDecoderAndGetFinalImage(xIn: MPSGraphTensorData) -> MPSGraphTensorData {
-        // MEM-HACK: decoder is loaded from disc and deallocated to save memory (at cost of latency)
-        let x = xIn
-        let decoderGraph = makeGraph()
-        let decoderIn = decoderGraph.placeholder(shape: x.shape, dataType: MPSDataType.float16, name: nil)
-        let decoderOut = makeDecoder(graph: decoderGraph, xIn: decoderIn)
-        return decoderGraph.run(with: commandQueue, feeds: [decoderIn: x], targetTensors: [decoderOut], targetOperations: nil)[decoderOut]!
-    }
-    
-    private func reorderAnUnexpectedJourney(x: [MPSGraphTensorData]) -> [MPSGraphTensorData] {
-        var out = [MPSGraphTensorData]()
-        for r in unetAnUnexpectedJourneyExecutable!.feedTensors! {
-            for i in x {
-                if (i.shape == r.shape) {
-                    out.append(i)
-                }
-            }
-        }
-        return out
-    }
-    
-    private func reorderTheDesolationOfSmaug(x: [MPSGraphTensorData]) -> [MPSGraphTensorData] {
-        var out = [MPSGraphTensorData]()
-        for r in unetTheDesolationOfSmaugExecutable!.feedTensors! {
-            out.append(x[theDesolationOfSmaugIndices[r]!])
-        }
-        return out
-    }
-    
-    private func reorderTheBattleOfTheFiveArmies(x: [MPSGraphTensorData]) -> [MPSGraphTensorData] {
-        var out = [MPSGraphTensorData]()
-        for r in unetTheBattleOfTheFiveArmiesExecutable!.feedTensors! {
-            out.append(x[theBattleOfTheFiveArmiesIndices[r]!])
-        }
-        return out
-    }
-    
-    private func runUNet(latent: MPSGraphTensorData, guidance: MPSGraphTensorData, temb: MPSGraphTensorData) -> MPSGraphTensorData {
-        var x = unetAnUnexpectedJourneyExecutable!.run(with: commandQueue, inputs: reorderAnUnexpectedJourney(x: [latent, guidance, temb]), results: nil, executionDescriptor: nil)
-        x = unetTheDesolationOfSmaugExecutable!.run(with: commandQueue, inputs: reorderTheDesolationOfSmaug(x: x + [guidance]), results: nil, executionDescriptor: nil)
-        return unetTheBattleOfTheFiveArmiesExecutable!.run(with: commandQueue, inputs: reorderTheBattleOfTheFiveArmies(x: x + [guidance]), results: nil, executionDescriptor: nil)[0]
-    }
-    
-    private func runBatchedUNet(latent: MPSGraphTensorData, baseGuidance: MPSGraphTensorData, textGuidance: MPSGraphTensorData, temb: MPSGraphTensorData) -> (MPSGraphTensorData, MPSGraphTensorData) {
-        // concat
-        var graph = makeGraph()
-        let bg = graph.placeholder(shape: baseGuidance.shape, dataType: MPSDataType.float16, name: nil)
-        let tg = graph.placeholder(shape: textGuidance.shape, dataType: MPSDataType.float16, name: nil)
-        let concatGuidance = graph.concatTensors([bg, tg], dimension: 0, name: nil)
-        let concatGuidanceData = graph.run(feeds: [bg : baseGuidance, tg: textGuidance], targetTensors: [concatGuidance], targetOperations: nil)[concatGuidance]!
-        // run
-        let concatEtaData = runUNet(latent: latent, guidance: concatGuidanceData, temb: temb)
-        // split
-        graph = makeGraph()
-        let etas = graph.placeholder(shape: concatEtaData.shape, dataType: concatEtaData.dataType, name: nil)
-        let eta0 = graph.sliceTensor(etas, dimension: 0, start: 0, length: 1, name: nil)
-        let eta1 = graph.sliceTensor(etas, dimension: 0, start: 1, length: 1, name: nil)
-        let etaRes = graph.run(feeds: [etas: concatEtaData], targetTensors: [eta0, eta1], targetOperations: nil)
-        return (etaRes[eta0]!, etaRes[eta1]!)
-    }
-    
-    private func generateLatent(prompt: String, negativePrompt: String, seed: Int, steps: Int, guidanceScale: Float, completion: @escaping (CGImage?, Float, String)->()) -> MPSGraphTensorData {
-        completion(nil, 0, "Tokenizing...")
-        
-        // 1. String -> Tokens
-        let baseTokens = tokenizer.encode(s: negativePrompt)
-        let tokens = tokenizer.encode(s: prompt)
-        completion(nil, 0.25 * 1 / Float(steps), "Encoding...")
-        
-        // 2. Tokens -> Embedding
-        let (baseGuidance, textGuidance) = runTextGuidance(baseTokens: baseTokens, tokens: tokens)
-        if (saveMemory) {
-            // MEM-HACK unload the text guidance to fit the unet
-            textGuidanceExecutable = nil
-        }
-        completion(nil, 0.5 * 1 / Float(steps), "Generating noise...")
-        
-        // 3. Noise generation
-        var latent = randomLatent(seed: seed)
-        let timesteps = Array<Int>(stride(from: 1, to: 1000, by: Int(1000 / steps)))
-        completion(nil, 0.75 * 1 / Float(steps), "Starting diffusion...")
-        
-        // 4. Diffusion
-        for t in (0..<timesteps.count).reversed() {
-            let tick = CFAbsoluteTimeGetCurrent()
-            
-            // step
-            let tsPrev = t > 0 ? timesteps[t - 1] : timesteps[t] - 1000 / steps
-            let tData = [Int32(timesteps[t])].withUnsafeBufferPointer {Data(buffer: $0)}
-            let tMPSData = MPSGraphTensorData(device: graphDevice, data: tData, shape: [1], dataType: MPSDataType.int32)
-            let tPrevData = [Int32(tsPrev)].withUnsafeBufferPointer {Data(buffer: $0)}
-            let tPrevMPSData = MPSGraphTensorData(device: graphDevice, data: tPrevData, shape: [1], dataType: MPSDataType.int32)
-            let guidanceScaleData = [Float16(guidanceScale)].withUnsafeBufferPointer {Data(buffer: $0)}
-            let guidanceScaleMPSData = MPSGraphTensorData(device: graphDevice, data: guidanceScaleData, shape: [1], dataType: MPSDataType.float16)
-            let temb = tembGraph.run(with: commandQueue, feeds: [tembTIn: tMPSData], targetTensors: [tembOut], targetOperations: nil)[tembOut]!
-            let etaUncond: MPSGraphTensorData
-            let etaCond: MPSGraphTensorData
-            if (saveMemory) {
-                // MEM-HACK: un/neg-conditional and text-conditional are run in two separate passes (not batched) to save memory
-                etaUncond = runUNet(latent: latent, guidance: baseGuidance, temb: temb)
-                etaCond = runUNet(latent: latent, guidance: textGuidance, temb: temb)
-            } else {
-                (etaUncond, etaCond) = runBatchedUNet(latent: latent, baseGuidance: baseGuidance, textGuidance: textGuidance, temb: temb)
-            }
-            let res = diffGraph.run(with: commandQueue, feeds: [diffXIn: latent, diffEtaUncondIn: etaUncond, diffEtaCondIn: etaCond, diffTIn: tMPSData, diffTPrevIn: tPrevMPSData, diffGuidanceScaleIn: guidanceScaleMPSData], targetTensors: [diffOut, diffAuxOut], targetOperations: nil)
-            latent = res[diffOut]!
-            
-            // update ui
-            let tock = CFAbsoluteTimeGetCurrent()
-            let stepRuntime = String(format:"%.2fs", tock - tick)
-            let progressDesc = t == 0 ? "Decoding..." : "Step \(timesteps.count - t) / \(timesteps.count) (\(stepRuntime) / step)"
-            completion(tensorToCGImage(data: res[diffAuxOut]!), Float(timesteps.count - t) / Float(timesteps.count), progressDesc)
-        }
-        return latent
-    }
-    
-    public func generate(prompt: String, negativePrompt: String, seed: Int, steps: Int, guidanceScale: Float, completion: @escaping (CGImage?, Float, String)->()) {
-        let latent = generateLatent(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: steps, guidanceScale: guidanceScale, completion: completion)
-        
-        if (saveMemory) {
-            // MEM-HACK: unload the unet to fit the decoder
-            unetAnUnexpectedJourneyExecutable = nil
-            unetTheDesolationOfSmaugExecutable = nil
-            unetTheBattleOfTheFiveArmiesExecutable = nil
-        }
-        
-        // 5. Decoder
-        let decoderRes = loadDecoderAndGetFinalImage(xIn: latent)
-        completion(tensorToCGImage(data: decoderRes), 1.0, "Cooling down...")
-        
-        if (saveMemory) {
-            // reload the unet and text guidance
-            initAnUnexpectedJourney()
-            initTheDesolationOfSmaug()
-            initTheBattleOfTheFiveArmies()
-            initTextGuidance()
-        }
-    }
-}
+
 
 func tensorToCGImage(data: MPSGraphTensorData) -> CGImage {
     let shape = data.shape.map{$0.intValue}
