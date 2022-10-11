@@ -3,9 +3,9 @@ import MapleDiffusion
 
 struct ContentView: View {
 #if os(iOS)
-    let mapleDiffusion = MapleDiffusion(saveMemoryButBeSlower: true)
+    let mapleDiffusion : MapleDiffusion // = MapleDiffusion(saveMemoryButBeSlower: true)
 #else
-    let mapleDiffusion = MapleDiffusion(saveMemoryButBeSlower: false, modelFolder: URL(fileURLWithPath: "/Users/mortenjust/Library/Application Support/Photato/bins"))
+    @ObservedObject var mapleDiffusion = MapleDiffusion(saveMemoryButBeSlower: false, modelFolder: URL(fileURLWithPath: "/Users/mortenjust/Library/Application Support/Photato/bins"))
     
 #endif
     let dispatchQueue = DispatchQueue(label: "Generation")
@@ -17,12 +17,13 @@ struct ContentView: View {
     @State var running: Bool = false
     @State var progressProp: Float = 1
     @State var progressStage: String = "Ready"
+    
     func generate() {
         dispatchQueue.async {
             running = true
             progressStage = ""
             progressProp = 0
-            mapleDiffusion.generate(prompt: prompt, negativePrompt: negativePrompt, seed: Int.random(in: 1..<Int.max), steps: Int(steps), guidanceScale: guidanceScale) { (cgim, p, s) -> () in
+            try! mapleDiffusion.generate(prompt: prompt, negativePrompt: negativePrompt, seed: Int.random(in: 1..<Int.max), steps: Int(steps), guidanceScale: guidanceScale) { (cgim, p, s) -> () in
                 if (cgim != nil) {
                     image = Image(cgim!, scale: 1.0, label: Text("Generated image"))
                 }
@@ -32,6 +33,8 @@ struct ContentView: View {
             running = false
         }
     }
+    
+    
     var body: some View {
         VStack {
 #if os(iOS)
@@ -73,8 +76,12 @@ struct ContentView: View {
                     .foregroundColor(.white)
                     .font(Font.title)
                     .cornerRadius(32)
-            }.buttonStyle(.borderless).disabled(running)
+            }.buttonStyle(.borderless)
+                .disabled(running || !mapleDiffusion.isModelLoaded)
+                
+            Text("loaded \(mapleDiffusion.isModelLoaded ? "yes" : "no")")
         }.padding(16)
+            
     }
 }
 
