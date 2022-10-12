@@ -1,12 +1,48 @@
 
 import MetalPerformanceShadersGraph
 import Foundation
+import AppKit
+import Combine
 
 
+public struct ProgressMonitor {
+    public var completed: Double = 0
+    public var total: Double
+    public var message: String = ""
+    public var fractionCompleted : Double { completed/total }
+    
+    mutating func update(completed: Double, message:String) {
+        self.completed = completed
+        self.message = message
+    }
+    
+    mutating func with(completed:Double, message:String) -> ProgressMonitor {
+        self.completed = completed
+        self.message = message
+        return self
+    }
+    
+    mutating func increasing(withMessage message:String) -> ProgressMonitor {
+        self.completed += 1
+        self.message = message
+        return self
+    }
+    
+}
 
 @available(macOS 12.3, *)
 public class MapleDiffusion : ObservableObject {
     @Published public var isModelLoaded = false
+    
+    public enum GeneratorState {
+        case modelIsLoading(progress: ProgressMonitor)
+        case ready
+        case imageGenerating(progress: ProgressMonitor, image: NSImage)
+        case imageGenerated(image:NSImage)
+    }
+    
+    
+    public var state = PassthroughSubject<GeneratorState, Never>()
     
     enum ModelLoadError : Error {
         case whileLoading
@@ -62,73 +98,97 @@ public class MapleDiffusion : ObservableObject {
         // set global folder
         modelFolder = mf
         
-        Task {
-           try loadModel(saveMemoryButBeSlower: saveMemoryButBeSlower)
-        }
-       
+        
+        try? loadModel(saveMemoryButBeSlower: saveMemoryButBeSlower)
+        
+        
     }
+    
+    func updateState(_ newState:GeneratorState) {
+        Task {
+            await MainActor.run(body: {
+                self.state.send(newState)
+            })
+        }
+    }
+    
+    
+    
     
     func loadModel(saveMemoryButBeSlower: Bool = true) throws {
         
-        
-        print("instantiate device and queue")
-        saveMemory = saveMemoryButBeSlower
-        guard let device = MTLCreateSystemDefaultDevice() else { throw ModelLoadError.whileLoading }
-        graphDevice = MPSGraphDevice(mtlDevice: device)
-        commandQueue = device.makeCommandQueue()!
-        
-        // text tokenization
-        print("instantiate tokenizer")
-        tokenizer = BPETokenizer()
-        
-        // time embedding
-        print("make temb graph")
-        tembGraph = makeGraph()
-        tembTIn = tembGraph!.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        tembOut = makeTimeFeatures(graph: tembGraph!, tIn: tembTIn!) // force
-        
-        // diffusion
-        print("make diffusion graph")
-        diffGraph = makeGraph()
-        guard let diffGraph else {
-            print("bailing")
-            throw ModelLoadError.whileLoading }
-        
-        print("setup placeholders")
-        
-        // these could probably be wrapped in their own struct to simplify
-        diffXIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-        diffEtaUncondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-        diffEtaCondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-        diffTIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        diffTPrevIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        diffGuidanceScaleIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.float16, name: nil)
-        
-        print("set up diffusion")
-        
-//        guard let diffTIn, var diffOut, let diffTPrevIn, let diffEtaUncondIn, let diffXIn, let diffEtaCondIn, let diffGuidanceScaleIn  else {
-//            print("guard fell")
-//            throw ModelLoadError.whileLoading }
-        
-        diffOut = makeDiffusionStep(graph: diffGraph, xIn: diffXIn!, etaUncondIn: diffEtaUncondIn!, etaCondIn: diffEtaCondIn!, tIn: diffTIn!, tPrevIn: diffTPrevIn!, guidanceScaleIn: diffGuidanceScaleIn!)
-        diffAuxOut = makeAuxUpsampler(graph: diffGraph, xIn: diffOut!)
-        
-        
-        print("instantiate text guidance")
-        // text guidance
-        initTextGuidance()
-        
-        // unet
-        print("instantiate unet 1")
-        try initAnUnexpectedJourney()
-        print("instantiate unet 2")
-        try initTheDesolationOfSmaug()
-        print("instantiate unet 3")
-        try initTheBattleOfTheFiveArmies()
-        
-        DispatchQueue.main.async {
+        Task {
+            var progress = ProgressMonitor(total: 11)
+            
+            
+            self.updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Creating device and queue")))
+            
+            print("instantiate device and queue")
+            saveMemory = saveMemoryButBeSlower
+            guard let device = MTLCreateSystemDefaultDevice() else { throw ModelLoadError.whileLoading }
+            graphDevice = MPSGraphDevice(mtlDevice: device)
+            commandQueue = device.makeCommandQueue()!
+            
+            // text tokenization
+            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Creating tokenizer")))
+            print("instantiate tokenizer")
+            tokenizer = BPETokenizer()
+            
+            // time embedding
+            print("make temb graph")
+            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Making temporal graph")))
+            tembGraph = makeGraph()
+            tembTIn = tembGraph!.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
+            tembOut = makeTimeFeatures(graph: tembGraph!, tIn: tembTIn!) // force
+            
+            // diffusion
+            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Creating diffusion graph")))
+            print("make diffusion graph")
+            diffGraph = makeGraph()
+            guard let diffGraph else {
+                print("bailing")
+                throw ModelLoadError.whileLoading }
+            
+            print("setup placeholders")
+            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Setting up placeholders")))
+            
+            // these could probably be wrapped in their own struct to simplify
+            diffXIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
+            diffEtaUncondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
+            diffEtaCondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
+            diffTIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
+            diffTPrevIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
+            diffGuidanceScaleIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.float16, name: nil)
+            
+            print("set up diffusion")
+            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Setting up diffusion")))
+            
+            diffOut = makeDiffusionStep(graph: diffGraph, xIn: diffXIn!, etaUncondIn: diffEtaUncondIn!, etaCondIn: diffEtaCondIn!, tIn: diffTIn!, tPrevIn: diffTPrevIn!, guidanceScaleIn: diffGuidanceScaleIn!)
+            diffAuxOut = makeAuxUpsampler(graph: diffGraph, xIn: diffOut!)
+            
+            
+            print("instantiate text guidance")
+            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing text guidance")))
+            // text guidance
+            initTextGuidance()
+            
+            // unet
+            print("instantiate unet 1")
+            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing U-Net 1")))
+            try initAnUnexpectedJourney()
+            print("instantiate unet 2")
+            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing U-Net 2")))
+            try initTheDesolationOfSmaug()
+            print("instantiate unet 3")
+            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing U-Net 3")))
+            try initTheBattleOfTheFiveArmies()
+            
+             self.updateState(.ready)
             print("model loading done")
-            self.isModelLoaded = true
+            DispatchQueue.main.async {
+                self.isModelLoaded = true
+            }
+            
         }
     }
     
@@ -343,6 +403,37 @@ public class MapleDiffusion : ObservableObject {
             completion(tensorToCGImage(data: res[diffAuxOut!]!), Float(timesteps.count - t) / Float(timesteps.count), progressDesc)
         }
         return latent
+    }
+    
+    
+    
+    public struct GenResult {
+        internal init(image: CGImage?, progress: Double, stage: String) {
+            self.image = image
+            self.progress = progress
+            self.stage = stage
+        }
+        
+        public let image : CGImage?
+        public let progress : Double
+        public let stage : String
+    }
+    
+    public func generate(prompt: String, negativePrompt: String, seed: Int, steps: Int, guidanceScale: Float) throws
+    -> AnyPublisher<GenResult, Never>
+    {
+        let subject = PassthroughSubject<GenResult, Never>()
+        
+        Task {
+            try generate(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: steps, guidanceScale: guidanceScale) { (cgImage, progress, stage) in
+                
+                let result = GenResult(image: cgImage, // TODO: Unsafe
+                                       progress: Double(progress),
+                                       stage: stage)
+                subject.send(result)
+            }
+        }
+        return subject.eraseToAnyPublisher()
     }
     
     public func generate(prompt: String, negativePrompt: String, seed: Int, steps: Int, guidanceScale: Float, completion: @escaping (CGImage?, Float, String)->()) throws {
