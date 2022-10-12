@@ -36,9 +36,7 @@ public class MapleDiffusion : ObservableObject {
     
     public enum GeneratorState {
         case modelIsLoading(progress: ProgressMonitor)
-        case ready
-        case imageGenerating(progress: ProgressMonitor, image: NSImage)
-        case imageGenerated(image:NSImage)
+        case ready        
     }
     
     
@@ -328,15 +326,6 @@ public class MapleDiffusion : ObservableObject {
     }
     
     private func generateLatent(prompt: String, negativePrompt: String, seed: Int, steps: Int, guidanceScale: Float, completion: @escaping (CGImage?, Float, String) -> ()) throws -> MPSGraphTensorData {
-        
-        
-        
-//        guard let tokenizer, let saveMemory, let tembGraph, let graphDevice, let tembOut, let commandQueue, let tembTIn
-//
-////                let diffXIn, let diffGraph, let diffEtaCondIn, let diffAuxOut, let diffGuidanceScaleIn, let diffTPrevIn, let diffOut, let diffTIn, let diffEtaUncondIn
-//        else { throw GenerationError.placeholder(#function) }
-        
-        
         
         completion(nil, 0, "Tokenizing...")
         

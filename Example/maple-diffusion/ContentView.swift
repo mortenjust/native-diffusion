@@ -87,8 +87,6 @@ struct ContentView: View {
                 .disabled(running || !mapleDiffusion.isModelLoaded)
             
         }.padding(16)
-            
-        
             .onReceive(mapleDiffusion.state) { newState in
                 switch newState {
                 
@@ -100,14 +98,8 @@ struct ContentView: View {
                 case .ready:
                     print("model ready")
                     running = false
-                case .imageGenerating(progress: let progress, image: let image):
-                    print("imagen")
-                case .imageGenerated(image: let image):
-                    print("gene")
                 }
             }
-        
-            
     }
 }
 
