@@ -36,7 +36,7 @@ public class MapleDiffusion : ObservableObject {
     
     public enum GeneratorState {
         case modelIsLoading(progress: ProgressMonitor)
-        case ready        
+        case ready
     }
     
     
@@ -92,7 +92,8 @@ public class MapleDiffusion : ObservableObject {
     public var height: NSNumber = 64
     
     
-    public init(saveMemoryButBeSlower: Bool = true, modelFolder mf : URL) {
+    public init(saveMemoryButBeSlower: Bool = true,
+                modelFolder mf : URL? = Bundle.main.url(forResource: "bins", withExtension: nil)) {
         // set global folder
         modelFolder = mf
         
