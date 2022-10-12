@@ -96,11 +96,7 @@ public class MapleDiffusion : ObservableObject {
                 modelFolder mf : URL? = Bundle.main.url(forResource: "bins", withExtension: nil)) {
         // set global folder
         modelFolder = mf
-        
-        
         try? loadModel(saveMemoryButBeSlower: saveMemoryButBeSlower)
-        
-        
     }
     
     func updateState(_ newState:GeneratorState) {

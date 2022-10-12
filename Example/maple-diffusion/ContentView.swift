@@ -18,6 +18,7 @@ struct ContentView: View {
     @State var running: Bool = false
     @State var progressProp: Float = 1
     @State var progressStage: String = "Ready"
+    @State var seed : Int = 42
     
     @State var bin = Set<AnyCancellable>()
     
@@ -26,8 +27,8 @@ struct ContentView: View {
             running = true
             progressStage = ""
             progressProp = 0
-            // Int.random(in: 1..<Int.max)
-            try! mapleDiffusion.generate(prompt: prompt, negativePrompt: negativePrompt, seed: 42, steps: Int(steps), guidanceScale: guidanceScale) { (cgim, p, s) -> () in
+            
+            try! mapleDiffusion.generate(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: Int(steps), guidanceScale: guidanceScale) { (cgim, p, s) -> () in
                 if (cgim != nil) {
                     image = Image(cgim!, scale: 1.0, label: Text("Generated image"))
                 }
@@ -59,10 +60,22 @@ struct ContentView: View {
             }
             HStack {
                 HStack {
-                    Text("Scale").bold()
-                    Text(String(format: "%.1f", guidanceScale)).foregroundColor(.secondary)
-                }.frame(width: 96, alignment: .leading)
-                Slider(value: $guidanceScale, in: 1...20)
+                    HStack {
+                        Text("Scale").bold()
+                        Text(String(format: "%.1f", guidanceScale)).foregroundColor(.secondary)
+                    }.frame(width: 96, alignment: .leading)
+                    Slider(value: $guidanceScale, in: 1...20)
+                }
+                HStack {
+                    Text("Seed").bold()
+                    TextField("", value: $seed, format: .number)
+                        .frame(maxWidth: 180)
+                    Button {
+                        seed = Int.random(in: 1...Int.max)
+                    } label: {
+                        Image(systemName: "arrow.clockwise.circle.fill")
+                    }.buttonStyle(.plain)
+                }
             }
             HStack {
                 HStack {
