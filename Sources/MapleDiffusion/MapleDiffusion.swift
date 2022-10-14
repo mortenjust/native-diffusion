@@ -34,7 +34,21 @@ public struct ProgressMonitor {
 public class MapleDiffusion : ObservableObject {
     @Published public var isModelLoaded = false
     
-    public enum GeneratorState {
+    public enum GeneratorState: Equatable {
+        public static func == (lhs: MapleDiffusion.GeneratorState, rhs: MapleDiffusion.GeneratorState) -> Bool {
+            switch(lhs, rhs) {
+            case (.ready, .ready):
+                return true
+            case (.modelIsLoading( _), .modelIsLoading( _)):
+                return true
+            case (.notStarted, .notStarted):
+                return true
+            default:
+                return false
+            }
+        }
+        
+        case notStarted
         case modelIsLoading(progress: ProgressMonitor)
         case ready
     }
