@@ -368,8 +368,6 @@ public class MapleDiffusion : ObservableObject {
                 (etaUncond, etaCond) = try runBatchedUNet(latent: latent, baseGuidance: baseGuidance, textGuidance: textGuidance, temb: temb)
             }
             
-
-            
             let res = diffGraph!.run(
                 with: commandQueue!,
                 feeds: [diffXIn!: latent,
@@ -386,12 +384,14 @@ public class MapleDiffusion : ObservableObject {
             let tock = CFAbsoluteTimeGetCurrent()
             let stepRuntime = String(format:"%.2fs", tock - tick)
             let progressDesc = t == 0 ? "Decoding..." : "Step \(timesteps.count - t) / \(timesteps.count) (\(stepRuntime) / step)"
-            completion(tensorToCGImage(data: res[diffAuxOut!]!), Float(timesteps.count - t) / Float(timesteps.count), progressDesc)
+            
+            let progress = Float(timesteps.count - t) / Float(timesteps.count)
+            completion(tensorToCGImage(data: res[diffAuxOut!]!),
+                       progress - 0.01, // 0.01 is buffer for last step
+                       progressDesc)
         }
         return latent
     }
-    
-    
     
     public struct GenResult {
         internal init(image: CGImage?, progress: Double, stage: String) {
@@ -405,6 +405,7 @@ public class MapleDiffusion : ObservableObject {
         public let stage : String
     }
     
+    // MARK: Generate with publisher
     public func generate(prompt: String, negativePrompt: String, seed: Int, steps: Int, guidanceScale: Float) throws
     -> AnyPublisher<GenResult, Never>
     {
@@ -417,6 +418,9 @@ public class MapleDiffusion : ObservableObject {
                                        progress: Double(progress),
                                        stage: stage)
                 subject.send(result)
+                if(progress >= 1) {
+                    subject.send(completion: .finished)
+                }
             }
         }
         return subject.eraseToAnyPublisher()

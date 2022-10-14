@@ -22,21 +22,42 @@ struct ContentView: View {
     
     @State var bin = Set<AnyCancellable>()
     
+//    func generate() {
+//        dispatchQueue.async {
+//            running = true
+//            progressStage = ""
+//            progressProp = 0
+//
+//            try! mapleDiffusion.generate(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: Int(steps), guidanceScale: guidanceScale) { (cgim, p, s) -> () in
+//                if (cgim != nil) {
+//                    image = Image(cgim!, scale: 1.0, label: Text("Generated image"))
+//                }
+//                progressProp = p
+//                progressStage = s
+//            }
+//            running = false
+//        }
+//    }
+    
     func generate() {
-        dispatchQueue.async {
-            running = true
-            progressStage = ""
-            progressProp = 0
+        running = true
+        progressStage = ""
+        progressProp = 0
+        
+        try! mapleDiffusion.generate(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: Int(steps), guidanceScale: guidanceScale)
             
-            try! mapleDiffusion.generate(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: Int(steps), guidanceScale: guidanceScale) { (cgim, p, s) -> () in
-                if (cgim != nil) {
-                    image = Image(cgim!, scale: 1.0, label: Text("Generated image"))
+            .sink(receiveCompletion: { completion in
+                running = false
+            },
+                  receiveValue:  { result in
+                if let i = result.image {
+                    image = Image(i, scale: 1, label: Text("Generated Image"))
                 }
-                progressProp = p
-                progressStage = s
-            }
-            running = false
-        }
+                print("stage", result.stage)
+                progressStage = result.stage
+                progressProp = Float(result.progress)
+            }).store(in: &bin)
+                  
     }
     
     
