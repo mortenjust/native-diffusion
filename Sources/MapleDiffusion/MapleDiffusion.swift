@@ -3,10 +3,6 @@ import MetalPerformanceShadersGraph
 import Foundation
 import Combine
 
-#if canImport(AppKit)
-import AppKit
-#endif
-
 
 public struct ProgressMonitor {
     public var completed: Double = 0
