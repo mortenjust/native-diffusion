@@ -1,8 +1,11 @@
 
 import MetalPerformanceShadersGraph
 import Foundation
-import AppKit
 import Combine
+
+#if canImport(AppKit)
+import AppKit
+#endif
 
 
 public struct ProgressMonitor {
@@ -30,7 +33,7 @@ public struct ProgressMonitor {
     
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 public class MapleDiffusion : ObservableObject {
     @Published public var isModelLoaded = false
     
