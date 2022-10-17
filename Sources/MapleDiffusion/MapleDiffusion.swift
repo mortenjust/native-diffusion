@@ -5,7 +5,7 @@ import AppKit
 import Combine
 
 
-public struct ProgressMonitor {
+public struct ProgressMonitor : Equatable {
     public var completed: Double = 0
     public var total: Double
     public var message: String = ""
@@ -26,6 +26,10 @@ public struct ProgressMonitor {
         self.completed += 1
         self.message = message
         return self
+    }
+    
+    public static func example(_ progress : Double) -> ProgressMonitor {
+        ProgressMonitor(completed: progress, total: 1, message: "Loading files")
     }
     
 }
