@@ -114,7 +114,7 @@ public class MapleDiffusion : ObservableObject {
                 modelFolder mf : URL? = Bundle.main.url(forResource: "bins", withExtension: nil)) {
         // set global folder
         modelFolder = mf
-        try? loadModel(saveMemoryButBeSlower: saveMemoryButBeSlower)
+//        try? loadModel(saveMemoryButBeSlower: saveMemoryButBeSlower)
     }
     
     func updateState(_ newState:GeneratorState) {
@@ -125,10 +125,8 @@ public class MapleDiffusion : ObservableObject {
         }
     }
     
-    
-    
-    
-    func loadModel(saveMemoryButBeSlower: Bool = true) throws {
+    /// Loads the model in a Task, but can still be heavy, probably due to the MPS stuff
+    public func loadModel(saveMemoryButBeSlower: Bool = true) throws {
         
         Task {
             var progress = ProgressMonitor(total: 11)
