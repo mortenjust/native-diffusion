@@ -141,7 +141,7 @@ struct ContentView: View {
 #if os(iOS)
                     try await mapleDiffusion.loadModel(saveMemoryButBeSlower: true)
 #else
-                    try await mapleDiffusion.loadModel()
+                    try await mapleDiffusion.loadModel(saveMemoryButBeSlower: false)
 #endif
                 } catch {
                     print(error)
