@@ -1,7 +1,6 @@
 
 import MetalPerformanceShadersGraph
 import Foundation
-import AppKit
 import Combine
 
 
@@ -34,7 +33,7 @@ public struct ProgressMonitor : Equatable {
     
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 public class MapleDiffusion : ObservableObject {
     @Published public var isModelLoaded = false
     

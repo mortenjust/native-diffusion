@@ -44,7 +44,7 @@ func makeUpsampleNearest(graph: MPSGraph, xIn: MPSGraphTensor, scaleFactor: Int=
     return graph.resize(xIn, size: [NSNumber(value:xIn.shape![1].intValue * scaleFactor), NSNumber(value:xIn.shape![2].intValue * scaleFactor)], mode: MPSGraphResizeMode.nearest, centerResult: true, alignCorners: false, layout: MPSGraphTensorNamedDataLayout.NHWC, name: nil)
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeGroupNorm(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     var x = xIn
     if (xIn.shape!.count == 3) {
@@ -66,12 +66,12 @@ func makeSwish(graph: MPSGraph, xIn: MPSGraphTensor) -> MPSGraphTensor {
     return graph.multiplication(xIn, graph.sigmoid(with: xIn, name: nil), name: nil)
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeGroupNormSwish(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     return makeSwish(graph: graph, xIn: makeGroupNorm(graph: graph, xIn: xIn, name: name))
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeDecoderResBlock(graph: MPSGraph, xIn: MPSGraphTensor, name: String, outChannels: NSNumber) -> MPSGraphTensor {
     var x = xIn
     x = makeGroupNormSwish(graph: graph, xIn: x, name: name + ".norm1")
@@ -85,7 +85,7 @@ func makeDecoderResBlock(graph: MPSGraph, xIn: MPSGraphTensor, name: String, out
     return graph.addition(x, xIn, name: "skip")
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeDecoderAttention(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     var x = makeGroupNorm(graph: graph, xIn: xIn, name: name + ".norm")
     let c = x.shape![3]
@@ -113,7 +113,7 @@ func makeByteConverter(graph: MPSGraph, xIn: MPSGraphTensor) -> MPSGraphTensor {
     return graph.concatTensors([x, alpha], dimension: 3, name: nil)
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeDecoder(graph: MPSGraph, xIn: MPSGraphTensor) -> MPSGraphTensor {
     var x = xIn
     let name = "first_stage_model.decoder"
@@ -185,7 +185,7 @@ func makeTimeEmbed(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGra
     return makeLinear(graph: graph, xIn: x, name: name + ".2", outChannels: 1280)
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeUNetResBlock(graph: MPSGraph, xIn: MPSGraphTensor, embIn: MPSGraphTensor, name: String, inChannels: NSNumber, outChannels: NSNumber) -> MPSGraphTensor {
     var x = xIn
     x = makeGroupNormSwish(graph: graph, xIn: x, name: name + ".in_layers.0")
@@ -286,7 +286,7 @@ func makeBasicTransformerBlock(graph: MPSGraph, xIn: MPSGraphTensor, name: Strin
     return graph.addition(ff, x, name: nil)
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeSpatialTransformerBlock(graph: MPSGraph, xIn: MPSGraphTensor, name: String, contextIn: MPSGraphTensor, saveMemory: Bool) -> MPSGraphTensor {
     let n, h, w, c: NSNumber
     (n, h, w, c) = (xIn.shape![0], xIn.shape![1], xIn.shape![2], xIn.shape![3])
@@ -300,7 +300,7 @@ func makeSpatialTransformerBlock(graph: MPSGraph, xIn: MPSGraphTensor, name: Str
     return graph.addition(x, xIn, name: nil)
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeOutputBlock(graph: MPSGraph, xIn: MPSGraphTensor, embIn: MPSGraphTensor, condIn: MPSGraphTensor, inChannels: NSNumber, outChannels: NSNumber, dHead: NSNumber, name: String, saveMemory: Bool, spatialTransformer: Bool = true, upsample: Bool = false) -> MPSGraphTensor {
     var x = xIn
     x = makeUNetResBlock(graph: graph, xIn: x, embIn: embIn, name: name + ".0", inChannels: inChannels, outChannels: outChannels)
@@ -315,7 +315,7 @@ func makeOutputBlock(graph: MPSGraph, xIn: MPSGraphTensor, embIn: MPSGraphTensor
 }
 
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeUNetAnUnexpectedJourney(graph: MPSGraph, xIn: MPSGraphTensor, tembIn: MPSGraphTensor, condIn: MPSGraphTensor, name: String, saveMemory: Bool = true) -> [MPSGraphTensor] {
     let emb = makeTimeEmbed(graph: graph, xIn: tembIn, name: name + ".time_embed")
     
@@ -382,7 +382,7 @@ func makeUNetAnUnexpectedJourney(graph: MPSGraph, xIn: MPSGraphTensor, tembIn: M
     return savedInputs + [emb] + [x]
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeUNetTheDesolationOfSmaug(graph: MPSGraph, savedInputsIn: [MPSGraphTensor], name: String, saveMemory: Bool = true) -> [MPSGraphTensor] {
     var savedInputs = savedInputsIn
     let condIn = savedInputs.popLast()!
@@ -408,7 +408,7 @@ func makeUNetTheDesolationOfSmaug(graph: MPSGraph, savedInputsIn: [MPSGraphTenso
     return savedInputs + [emb] + [x]
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeUNetTheBattleOfTheFiveArmies(graph: MPSGraph, savedInputsIn: [MPSGraphTensor], name: String, saveMemory: Bool = true) -> MPSGraphTensor {
     var savedInputs = savedInputsIn
     let condIn = savedInputs.popLast()!
@@ -456,7 +456,7 @@ func makeSqrtOneMinus(graph: MPSGraph, xIn: MPSGraphTensor) -> MPSGraphTensor {
     return graph.squareRoot(with: graph.subtraction(graph.constant(1.0, dataType: MPSDataType.float16), xIn, name: nil), name: nil)
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeDiffusionStep(graph: MPSGraph, xIn: MPSGraphTensor, etaUncondIn: MPSGraphTensor, etaCondIn: MPSGraphTensor, tIn: MPSGraphTensor, tPrevIn: MPSGraphTensor, guidanceScaleIn: MPSGraphTensor) -> MPSGraphTensor {
     
     // superconditioning
@@ -530,7 +530,7 @@ func makeTextEncoder(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSG
     return x
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeTextEmbeddings(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     var tokenEmbeddings = loadConstant(graph: graph, name: name + ".token_embedding.weight", shape: [1, 49408, 768])
     tokenEmbeddings = graph.broadcast(tokenEmbeddings, shape: [2, 49408, 768], name: nil)
@@ -540,7 +540,7 @@ func makeTextEmbeddings(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> M
     return graph.addition(embeddings, positionEmbeddings, name: nil)
 }
 
-@available(macOS 12.3, *)
+@available(iOS 15.4, macOS 12.3, *)
 func makeTextGuidance(graph: MPSGraph, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
     var x = makeTextEmbeddings(graph: graph, xIn: xIn, name: name + ".embeddings")
     x = makeTextEncoder(graph: graph, xIn: x, name: name + ".encoder")
