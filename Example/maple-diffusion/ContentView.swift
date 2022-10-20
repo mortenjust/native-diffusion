@@ -132,6 +132,8 @@ struct ContentView: View {
                 case .ready:
                     print("model ready")
                     running = false
+                case .notStarted:
+                    break
                 }
             }
     }

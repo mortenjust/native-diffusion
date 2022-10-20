@@ -358,6 +358,7 @@ public class MapleDiffusion : ObservableObject {
         
         // 3. Noise generation
         var latent = randomLatent(seed: seed)
+        
         let timesteps = Array<Int>(stride(from: 1, to: 1000, by: Int(1000 / steps)))
         completion(nil, 0.75 * 1 / Float(steps), "Starting diffusion...")
         
@@ -371,7 +372,8 @@ public class MapleDiffusion : ObservableObject {
             let tMPSData = MPSGraphTensorData(device: graphDevice!, data: tData, shape: [1], dataType: MPSDataType.int32)
             let tPrevData = [Int32(tsPrev)].withUnsafeBufferPointer {Data(buffer: $0)}
             let tPrevMPSData = MPSGraphTensorData(device: graphDevice!, data: tPrevData, shape: [1], dataType: MPSDataType.int32)
-            let guidanceScaleData = [Float16(guidanceScale)].withUnsafeBufferPointer {Data(buffer: $0)}
+            let guidanceScaleData = [Float32(guidanceScale)].withUnsafeBufferPointer {Data(buffer: $0)}
+
             let guidanceScaleMPSData = MPSGraphTensorData(device: graphDevice!, data: guidanceScaleData, shape: [1], dataType: MPSDataType.float16)
             let temb = tembGraph!.run(with: commandQueue!, feeds: [tembTIn!: tMPSData], targetTensors: [tembOut!], targetOperations: nil)[tembOut!]!
             let etaUncond: MPSGraphTensorData
@@ -473,3 +475,6 @@ public class MapleDiffusion : ObservableObject {
         }
     }
 }
+
+
+

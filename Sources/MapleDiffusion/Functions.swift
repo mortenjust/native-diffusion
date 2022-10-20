@@ -555,10 +555,20 @@ func makeAuxUpsampler(graph: MPSGraph, xIn: MPSGraphTensor) -> MPSGraphTensor {
 }
 
 
-
 func tensorToCGImage(data: MPSGraphTensorData) -> CGImage {
     let shape = data.shape.map{$0.intValue}
     var imageArrayCPUBytes = [UInt8](repeating: 0, count: shape.reduce(1, *))
     data.mpsndarray().readBytes(&imageArrayCPUBytes, strideBytes: nil)
-    return CGImage(width: shape[2], height: shape[1], bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: shape[2]*shape[3], space: CGColorSpaceCreateDeviceRGB(), bitmapInfo:  CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.noneSkipLast.rawValue), provider: CGDataProvider(data: NSData(bytes: &imageArrayCPUBytes, length: imageArrayCPUBytes.count))!, decode: nil, shouldInterpolate: true, intent: CGColorRenderingIntent.defaultIntent)!
+    
+    return CGImage(
+        width: shape[2], height: shape[1],
+        bitsPerComponent: 8, bitsPerPixel: 32,
+        bytesPerRow: shape[2]*shape[3],
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo:  CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.noneSkipLast.rawValue),
+        provider: CGDataProvider(data: NSData(bytes: &imageArrayCPUBytes,
+                                              length: imageArrayCPUBytes.count))!,
+        decode: nil,
+        shouldInterpolate: true,
+        intent: CGColorRenderingIntent.defaultIntent)!
 }
