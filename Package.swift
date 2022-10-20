@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "MapleDiffusion",
-    platforms: [ .macOS(.v12) ],
+    platforms: [ .macOS("12.3") ],
     
     products: [
         // Products define the executables and libraries a package produces, and make them visible to other packages.
@@ -28,4 +28,3 @@ let package = Package(
 //            dependencies: ["MapleDiffusion"]),
     ]
 )
-
