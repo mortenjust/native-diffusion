@@ -4,7 +4,7 @@ import Foundation
 import Combine
 
 
-public struct ProgressMonitor {
+public struct ProgressMonitor : Equatable {
     public var completed: Double = 0
     public var total: Double
     public var message: String = ""
@@ -25,6 +25,10 @@ public struct ProgressMonitor {
         self.completed += 1
         self.message = message
         return self
+    }
+    
+    public static func example(_ progress : Double) -> ProgressMonitor {
+        ProgressMonitor(completed: progress, total: 1, message: "Loading files")
     }
     
 }
@@ -109,7 +113,7 @@ public class MapleDiffusion : ObservableObject {
                 modelFolder mf : URL? = Bundle.main.url(forResource: "bins", withExtension: nil)) {
         // set global folder
         modelFolder = mf
-        try? loadModel(saveMemoryButBeSlower: saveMemoryButBeSlower)
+//        try? loadModel(saveMemoryButBeSlower: saveMemoryButBeSlower)
     }
     
     func updateState(_ newState:GeneratorState) {
@@ -120,10 +124,8 @@ public class MapleDiffusion : ObservableObject {
         }
     }
     
-    
-    
-    
-    func loadModel(saveMemoryButBeSlower: Bool = true) throws {
+    /// Loads the model in a Task, but can still be heavy, probably due to the MPS stuff
+    public func loadModel(saveMemoryButBeSlower: Bool = true) throws {
         
         Task {
             var progress = ProgressMonitor(total: 11)
@@ -355,6 +357,7 @@ public class MapleDiffusion : ObservableObject {
         
         // 3. Noise generation
         var latent = randomLatent(seed: seed)
+        
         let timesteps = Array<Int>(stride(from: 1, to: 1000, by: Int(1000 / steps)))
         completion(nil, 0.75 * 1 / Float(steps), "Starting diffusion...")
         
@@ -368,7 +371,8 @@ public class MapleDiffusion : ObservableObject {
             let tMPSData = MPSGraphTensorData(device: graphDevice!, data: tData, shape: [1], dataType: MPSDataType.int32)
             let tPrevData = [Int32(tsPrev)].withUnsafeBufferPointer {Data(buffer: $0)}
             let tPrevMPSData = MPSGraphTensorData(device: graphDevice!, data: tPrevData, shape: [1], dataType: MPSDataType.int32)
-            let guidanceScaleData = [Float16(guidanceScale)].withUnsafeBufferPointer {Data(buffer: $0)}
+            let guidanceScaleData = [Float32(guidanceScale)].withUnsafeBufferPointer {Data(buffer: $0)}
+
             let guidanceScaleMPSData = MPSGraphTensorData(device: graphDevice!, data: guidanceScaleData, shape: [1], dataType: MPSDataType.float16)
             let temb = tembGraph!.run(with: commandQueue!, feeds: [tembTIn!: tMPSData], targetTensors: [tembOut!], targetOperations: nil)[tembOut!]!
             let etaUncond: MPSGraphTensorData
@@ -470,3 +474,6 @@ public class MapleDiffusion : ObservableObject {
         }
     }
 }
+
+
+
