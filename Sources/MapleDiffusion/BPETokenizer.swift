@@ -32,7 +32,6 @@ class BPETokenizer {
             vocabList.append(String(bytesToUnicode[i]!))
         }
         vocabList += vocabList.map({$0 + "</w>"})
-//        let vocabFile = try! String(contentsOf: Bundle.main.url(forResource: "bins/bpe_simple_vocab_16e6", withExtension: "txt")!)
         let vocabFile = try! String(contentsOf: vocabFileURL)
         for (i, m) in vocabFile.split(separator: "\n")[1..<48_895].enumerated() {
             ranks[String(m)] = i
@@ -91,6 +90,9 @@ class BPETokenizer {
         for match in pat.matches(in: String(ns), range: NSRange(location: 0, length: ns.length)) {
             bpe.append(contentsOf: encodeToken(s: ns.substring(with: match.range)))
         }
-        return [49406] + bpe[..<min(75, bpe.count)] + [Int](repeating: 49407, count: 76 - bpe.count)
+        if (bpe.count > 75) {
+            print("Prompt of \(bpe.count) bpe tokens will be truncated: \(s)")
+        }
+        return [49406] + bpe[..<min(75, bpe.count)] + [Int](repeating: 49407, count: max(1, 76 - bpe.count))
     }
 }

@@ -109,96 +109,88 @@ public class MapleDiffusion : ObservableObject {
     public var height: NSNumber = 64
     
     
-    public init(saveMemoryButBeSlower: Bool = true,
-                modelFolder mf : URL? = Bundle.main.url(forResource: "bins", withExtension: nil)) {
+    public init(modelFolder mf : URL? = Bundle.main.url(forResource: "bins", withExtension: nil)) {
         // set global folder
         modelFolder = mf
-//        try? loadModel(saveMemoryButBeSlower: saveMemoryButBeSlower)
     }
     
-    func updateState(_ newState:GeneratorState) {
-        Task {
-            await MainActor.run(body: {
-                self.state.send(newState)
-            })
+    func updateState(_ newState:GeneratorState) async {
+        await MainActor.run {
+            self.state.send(newState)
         }
     }
     
     /// Loads the model in a Task, but can still be heavy, probably due to the MPS stuff
-    public func loadModel(saveMemoryButBeSlower: Bool = true) throws {
+    public func loadModel(saveMemoryButBeSlower: Bool = true) async throws {
+        var progress = ProgressMonitor(total: 11)
         
-        Task {
-            var progress = ProgressMonitor(total: 11)
-            
-            
-            self.updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Creating device and queue")))
-            
-            print("instantiate device and queue")
-            saveMemory = saveMemoryButBeSlower
-            guard let device = MTLCreateSystemDefaultDevice() else { throw ModelLoadError.whileLoading }
-            graphDevice = MPSGraphDevice(mtlDevice: device)
-            commandQueue = device.makeCommandQueue()!
-            
-            // text tokenization
-            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Creating tokenizer")))
-            print("instantiate tokenizer")
-            tokenizer = BPETokenizer()
-            
-            // time embedding
-            print("make temb graph")
-            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Making temporal graph")))
-            tembGraph = makeGraph()
-            tembTIn = tembGraph!.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-            tembOut = makeTimeFeatures(graph: tembGraph!, tIn: tembTIn!) // force
-            
-            // diffusion
-            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Creating diffusion graph")))
-            print("make diffusion graph")
-            diffGraph = makeGraph()
-            guard let diffGraph else {
-                print("bailing")
-                throw ModelLoadError.whileLoading }
-            
-            print("setup placeholders")
-            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Setting up placeholders")))
-            
-            // these could probably be wrapped in their own struct to simplify
-            diffXIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-            diffEtaUncondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-            diffEtaCondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-            diffTIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-            diffTPrevIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-            diffGuidanceScaleIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.float16, name: nil)
-            
-            print("set up diffusion")
-            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Setting up diffusion")))
-            
-            diffOut = makeDiffusionStep(graph: diffGraph, xIn: diffXIn!, etaUncondIn: diffEtaUncondIn!, etaCondIn: diffEtaCondIn!, tIn: diffTIn!, tPrevIn: diffTPrevIn!, guidanceScaleIn: diffGuidanceScaleIn!)
-            diffAuxOut = makeAuxUpsampler(graph: diffGraph, xIn: diffOut!)
-            
-            
-            print("instantiate text guidance")
-            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing text guidance")))
-            // text guidance
-            initTextGuidance()
-            
-            // unet
-            print("instantiate unet 1")
-            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing U-Net 1")))
-            try initAnUnexpectedJourney()
-            print("instantiate unet 2")
-            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing U-Net 2")))
-            try initTheDesolationOfSmaug()
-            print("instantiate unet 3")
-            updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing U-Net 3")))
-            try initTheBattleOfTheFiveArmies()
-            
-             self.updateState(.ready)
-            print("model loading done")
-            DispatchQueue.main.async {
-                self.isModelLoaded = true
-            }
-            
+        
+        await self.updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Creating device and queue")))
+        
+        print("instantiate device and queue")
+        saveMemory = saveMemoryButBeSlower
+        guard let device = MTLCreateSystemDefaultDevice() else { throw ModelLoadError.whileLoading }
+        graphDevice = MPSGraphDevice(mtlDevice: device)
+        commandQueue = device.makeCommandQueue()!
+        
+        // text tokenization
+        await updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Creating tokenizer")))
+        print("instantiate tokenizer")
+        tokenizer = BPETokenizer()
+        
+        // time embedding
+        print("make temb graph")
+        await updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Making temporal graph")))
+        tembGraph = makeGraph()
+        tembTIn = tembGraph!.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
+        tembOut = makeTimeFeatures(graph: tembGraph!, tIn: tembTIn!) // force
+        
+        // diffusion
+        await updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Creating diffusion graph")))
+        print("make diffusion graph")
+        diffGraph = makeGraph()
+        guard let diffGraph else {
+            print("bailing")
+            throw ModelLoadError.whileLoading }
+        
+        print("setup placeholders")
+        await updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Setting up placeholders")))
+        
+        // these could probably be wrapped in their own struct to simplify
+        diffXIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
+        diffEtaUncondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
+        diffEtaCondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
+        diffTIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
+        diffTPrevIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
+        diffGuidanceScaleIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.float16, name: nil)
+        
+        print("set up diffusion")
+        await updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Setting up diffusion")))
+        
+        diffOut = makeDiffusionStep(graph: diffGraph, xIn: diffXIn!, etaUncondIn: diffEtaUncondIn!, etaCondIn: diffEtaCondIn!, tIn: diffTIn!, tPrevIn: diffTPrevIn!, guidanceScaleIn: diffGuidanceScaleIn!)
+        diffAuxOut = makeAuxUpsampler(graph: diffGraph, xIn: diffOut!)
+        
+        
+        print("instantiate text guidance")
+        await updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing text guidance")))
+        // text guidance
+        initTextGuidance()
+        
+        // unet
+        print("instantiate unet 1")
+        await updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing U-Net 1")))
+        try initAnUnexpectedJourney()
+        print("instantiate unet 2")
+        await updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing U-Net 2")))
+        try initTheDesolationOfSmaug()
+        print("instantiate unet 3")
+        await updateState(.modelIsLoading(progress: progress.increasing(withMessage: "Initializing U-Net 3")))
+        try initTheBattleOfTheFiveArmies()
+        
+        await self.updateState(.ready)
+        print("model loading done")
+        DispatchQueue.main.async {
+            self.isModelLoaded = true
         }
     }
     

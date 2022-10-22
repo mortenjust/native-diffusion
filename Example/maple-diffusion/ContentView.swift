@@ -4,9 +4,9 @@ import Combine
 
 struct ContentView: View {
 #if os(iOS)
-    let mapleDiffusion : MapleDiffusion = MapleDiffusion(saveMemoryButBeSlower: true)
+    let mapleDiffusion : MapleDiffusion = MapleDiffusion()
 #else
-    @ObservedObject var mapleDiffusion = MapleDiffusion(saveMemoryButBeSlower: false, modelFolder: URL(fileURLWithPath: "/Users/mortenjust/Library/Application Support/Photato/bins"))
+    @ObservedObject var mapleDiffusion = MapleDiffusion(modelFolder: URL(fileURLWithPath: "/Users/mortenjust/Library/Application Support/Photato/bins"))
     
 #endif
     let dispatchQueue = DispatchQueue(label: "Generation")
@@ -134,6 +134,17 @@ struct ContentView: View {
                     running = false
                 case .notStarted:
                     break
+                }
+            }
+            .task {
+                do {
+#if os(iOS)
+                    try await mapleDiffusion.loadModel(saveMemoryButBeSlower: true)
+#else
+                    try await mapleDiffusion.loadModel(saveMemoryButBeSlower: false)
+#endif
+                } catch {
+                    print(error)
                 }
             }
     }
