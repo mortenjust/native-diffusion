@@ -11,10 +11,10 @@ extension FileManager {
 
 struct ContentView: View {
 #if os(iOS)
-    let mapleDiffusion = Diffusion(saveMemoryButBeSlower: true, modelFolder: FileManager.modelFolder)
+    let mapleDiffusion = Diffusion(saveMemoryButBeSlower: true, global_modelFolder: FileManager.global_modelFolder)
 #else
     let mapleDiffusion = Diffusion(saveMemoryButBeSlower: false,
-                                   modelFolder: FileManager.modelFolder)
+                                   global_modelFolder: FileManager.global_modelFolder)
 #endif
     let dispatchQueue = DispatchQueue(label: "Generation")
     @State var steps: Float = 20

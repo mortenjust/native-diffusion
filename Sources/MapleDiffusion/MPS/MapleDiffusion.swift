@@ -27,7 +27,7 @@ import Foundation
  ```
  
  */
-var modelFolder : URL! // TODO: Make optional, add safety
+var global_modelFolder : URL! // TODO: Make optional, add safety
 
 
 // madebyollin's code starts here:
@@ -42,7 +42,7 @@ func makeGraph(synchonize: Bool) -> MPSGraph {
 func loadConstant(graph: MPSGraph, name: String, shape: [NSNumber], fp32: Bool = false) -> MPSGraphTensor {
     let numels = shape.map({$0.intValue}).reduce(1, *)
 //    let fileUrl: URL = Bundle.main.url(forResource: "bins/" + name + (fp32 ? "_fp32" : ""), withExtension: ".bin")!
-    let fileUrl: URL = modelFolder.appendingPathComponent(name + (fp32 ? "_fp32" : "")).appendingPathExtension("bin")
+    let fileUrl: URL = global_modelFolder.appendingPathComponent(name + (fp32 ? "_fp32" : "")).appendingPathExtension("bin")
     let data: Data = try! Data(contentsOf: fileUrl, options: Data.ReadingOptions.alwaysMapped)
     let expectedCount = numels * (fp32 ? 4 : 2)
     assert(data.count == expectedCount, "Mismatch between byte count of data \(data.count) and expected size \(expectedCount) for \(numels) els in \(fileUrl)")
@@ -515,7 +515,7 @@ class BPETokenizer {
 //        let vocabFile = try! String(contentsOf: Bundle.main.url(forResource: "bins/bpe_simple_vocab_16e6", withExtension: "txt")!)
         
         let vocabFile = try! String(
-            contentsOf: modelFolder
+            contentsOf: global_modelFolder
                 .appendingPathComponent("bpe_simple_vocab_16e6")
                 .appendingPathExtension("txt")
         )
