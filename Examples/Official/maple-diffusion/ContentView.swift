@@ -11,10 +11,9 @@ extension FileManager {
 
 struct ContentView: View {
 #if os(iOS)
-    let mapleDiffusion = Diffusion(saveMemoryButBeSlower: true, global_modelFolder: FileManager.global_modelFolder)
+    let mapleDiffusion = Diffusion(saveMemoryButBeSlower: true)
 #else
-    let mapleDiffusion = Diffusion(saveMemoryButBeSlower: false,
-                                   global_modelFolder: FileManager.global_modelFolder)
+    let mapleDiffusion = Diffusion(saveMemoryButBeSlower: false)
 #endif
     let dispatchQueue = DispatchQueue(label: "Generation")
     @State var steps: Float = 20
@@ -27,12 +26,17 @@ struct ContentView: View {
     @State var progressStage: String = "Ready"
     
     func loadModels() {
-        dispatchQueue.async {
+        Task.detached {
             running = true
-            mapleDiffusion.initModels() { (p, s) -> () in
-                progressProp = p
-                progressStage = s
+            
+            #if os(iOS)
+            try! await mapleDiffusion.prepModels(localUrl: Bundle.main.url(forResource: "bins/", withExtension: nil)!)
+            #else
+            try! await mapleDiffusion.prepModels(localUrl: FileManager.modelFolder) { reportedProgress in
+                progressProp = Float(reportedProgress)
+                progressStage = "Loading"
             }
+            #endif
             running = false
         }
     }
@@ -58,14 +62,16 @@ struct ContentView: View {
             Text("🍁 Maple Diffusion").foregroundColor(.orange).bold().frame(alignment: Alignment.center)
 #endif
             if (image == nil) {
-                Rectangle().fill(.gray).aspectRatio(1.0, contentMode: .fit).frame(idealWidth: mapleDiffusion.width as? CGFloat, idealHeight: mapleDiffusion.height as? CGFloat)
+                Rectangle().fill(.gray).aspectRatio(1.0, contentMode: .fit)
+//                    .frame(idealWidth: mapleDiffusion.width as? CGFloat, idealHeight: mapleDiffusion.height as? CGFloat)
             } else {
 #if os(iOS)
                 ShareLink(item: image!, preview: SharePreview(prompt, image: image!)) {
-                    image!.resizable().aspectRatio(contentMode: .fit).frame(idealWidth: mapleDiffusion.width as? CGFloat, idealHeight: mapleDiffusion.height as? CGFloat)
+                    image!.resizable().aspectRatio(contentMode: .fit)
+//                        .frame(idealWidth: mapleDiffusion.width as? CGFloat, idealHeight: mapleDiffusion.height as? CGFloat)
                 }
 #else
-                image!.resizable().aspectRatio(contentMode: .fit).frame(idealWidth: mapleDiffusion.width as? CGFloat, idealHeight: mapleDiffusion.height as? CGFloat)
+                image!.resizable().aspectRatio(contentMode: .fit)
 #endif
             }
             HStack {

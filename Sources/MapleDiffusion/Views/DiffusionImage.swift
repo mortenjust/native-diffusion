@@ -39,11 +39,14 @@ public struct DiffusionImage : View {
                 .blur(radius: (1 - sqrt(progress)) * 600 )
                 .animation(.default, value: progress)
                 .clipShape(Rectangle())
+            #if os(macOS)
                 .draggable(enabled: enableDrag, image: image)
+            #endif
         }
     }
 }
 
+#if os(macOS)
 /// Allow safe and optional item dragging
 struct FinderDraggable : ViewModifier {
     let image: CGImage
@@ -65,3 +68,4 @@ extension View {
         self.modifier(FinderDraggable(image: image, enabled: enabled))
     }
 }
+#endif

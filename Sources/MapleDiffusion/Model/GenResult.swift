@@ -1,6 +1,8 @@
 
 import Foundation
-import AppKit
+//import AppKit
+import CoreImage
+import CoreGraphics
 
 public struct GenResult {
     internal init(image: CGImage?, progress: Double, stage: String) {

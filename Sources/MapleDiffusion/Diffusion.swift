@@ -1,6 +1,7 @@
 import Foundation
 import Combine
-
+import CoreGraphics
+import CoreImage
 
 /**
  
@@ -19,8 +20,8 @@ public class Diffusion : ObservableObject {
     
     var mapleDiffusion : MapleDiffusion!
     
-    public var width : NSNumber { mapleDiffusion.width }
-    public var height : NSNumber { mapleDiffusion.height }
+//    public var width : NSNumber { mapleDiffusion.width }
+//    public var height : NSNumber { mapleDiffusion.height }
     
     private var saveMemory = false
     
@@ -54,39 +55,7 @@ public class Diffusion : ObservableObject {
     /// Empty publisher for convenience in SwiftUI (since you can't listen to a nil)
     public static var placeholderPublisher : AnyPublisher<GenResult,Never> { PassthroughSubject<GenResult,Never>().eraseToAnyPublisher() }
     
-    /// Generate an image
-    public func generate(prompt: String, negativePrompt: String = "", seed: Int = Int.random(in: 0...Int.max), steps:Int = 20, guidanceScale:Float = 7.5) -> AnyPublisher<GenResult,Never> {
-        
-        let publisher = PassthroughSubject<GenResult, Never>()
-        
-        Task.detached(priority: .userInitiated) {
-            self.mapleDiffusion.generate(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: steps, guidanceScale: guidanceScale) { (cgImage, progress, stage) in
-                Task {
-                    print("RAW progress", progress)
-                    await MainActor.run {
-                        print("Step", stage, progress)
-                        
-                        /// Due to a glitch in MD, we get 2x progress 1.0
-                        var realProgress = progress
-                        if progress == 1 && stage.contains("Decoding") {
-                            realProgress = 0.98
-                        }
-                        
-                        
-                        
-                        let result = GenResult(image: cgImage, progress: Double(realProgress), stage: stage)
-                        
-                        
-                        publisher.send(result)
-//                        if progress >= 1 { publisher.send(completion: .finished)}
-                    }
-                }
-            }
-        }
-        
-        return publisher.eraseToAnyPublisher()
-        
-    }
+
     
     
     /**
@@ -102,29 +71,31 @@ public class Diffusion : ObservableObject {
     var combinedProgress : Double = 0
     
     
-    public func prepModels(localUrl: URL) async throws {
+    public func prepModels(localUrl: URL, progress:((Double)->Void)? = nil) async throws {
         print("prep: with localurl")
         let fetcher = ModelFetcher(local: localUrl)
-        try await initModels(fetcher: fetcher)
+        try await initModels(fetcher: fetcher, progress: progress)
     }
     
-    public func prepModels(remoteURL: URL) async throws {
+    public func prepModels(remoteURL: URL, progress:((Double)->Void)? = nil) async throws {
         print("prep: with remote")
         let fetcher = ModelFetcher(remote: remoteURL)
-        try await initModels(fetcher: fetcher)
+        try await initModels(fetcher: fetcher, progress: progress)
     }
     
-    public func prepModels(localUrl: URL, remoteUrl: URL) async throws {
+    public func prepModels(localUrl: URL, remoteUrl: URL, progress:((Double)->Void)? = nil) async throws {
         print("prep: with remote and local")
         let fetcher = ModelFetcher(local: localUrl, remote: remoteUrl)
-        try await initModels(fetcher: fetcher)
+        try await initModels(fetcher: fetcher, progress: progress)
     }
     
     private func initModels(
-        fetcher:ModelFetcher
+        fetcher:ModelFetcher,
+        progress:((Double)->Void)?
     ) async throws {
-        // split the progress into 2 and report combinedProgress
-        let combinedSteps = 2.0 // Fetch and init
+
+        // TODO: Don't use 2 steps if the model is downloaded
+        let combinedSteps = 2.0 // 1. fetch, 2. init
         var combinedProgress = 0.0
         
         print("prep: maybe downloading")
@@ -148,6 +119,7 @@ public class Diffusion : ObservableObject {
             combinedProgress = (p/combinedSteps) + earlierProgress
             print("initmodel says", p, "combined", combinedProgress)
             self.updateLoadingProgress(progress: combinedProgress, message: "Loading models")
+            progress?(combinedProgress)
         }
         
         /// 4. Done. Set published main status to true
@@ -216,19 +188,5 @@ public class Diffusion : ObservableObject {
         }
     }
     
-    public func generate(prompt: String,
-                         negativePrompt: String,
-                         seed: Int,
-                         steps: Int,
-                         guidanceScale: Float,
-                         completion: @escaping (CGImage?, Float, String)->()) {
-        
-        print("Generate")
-        
-        mapleDiffusion.generate(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: steps, guidanceScale: guidanceScale) { cgImage, progress, stage in
-            
-            completion(cgImage, progress, stage)
-            
-        }
-    }
+
 }

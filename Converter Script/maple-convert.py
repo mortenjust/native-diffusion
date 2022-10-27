@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import sys
 if len(sys.argv) < 2: raise ValueError(f"Usage: {sys.argv[0]} path_to_ckpt")
 
@@ -7,7 +7,7 @@ import torch as th
 import numpy as np
 
 ckpt = th.load(sys.argv[1], map_location="cpu")
-outpath = Path("maple-diffusion/bins")
+outpath = Path("./bins")
 outpath.mkdir(exist_ok=True)
 
 # vocab for clip
@@ -24,9 +24,10 @@ if not vocab_dest.exists():
         print("downloaded clip vocab")
 
 # model weights
-for k in ckpt["state_dict"]:
+for k, v in ckpt["state_dict"].items():
     if "first_stage_model.encoder" in k: continue
-    ckpt["state_dict"][k].numpy().astype('float16').tofile(outpath / (k + ".bin"))
+    if not hasattr(v, "numpy"): continue
+    v.numpy().astype('float16').tofile(outpath / (k + ".bin"))
     print("exporting state_dict", k, end="\r")
 print("\nexporting other stuff...")
 
