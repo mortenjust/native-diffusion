@@ -14,39 +14,40 @@ public class Diffusion : ObservableObject {
     /// Current state of the models. Only supports states for loading currently, updated via `initModels`
     public var state = PassthroughSubject<GeneratorState, Never>()
     
-    @MainActor
     @Published public var isModelReady = false
     @Published public var loadingProgress : Double = 0.0
     
+    var modelIsCold : Bool {
+        print("coldness: ", isModelReady, loadingProgress)
+        return !isModelReady && loadingProgress == 0 }
+    
     var mapleDiffusion : MapleDiffusion!
     
-//    public var width : NSNumber { mapleDiffusion.width }
-//    public var height : NSNumber { mapleDiffusion.height }
+    // Local, offline Stable Diffusion generation in Swift, no Python. Download + init + generate = 1 line of code.
+    
+    
+    public static var shared = Diffusion()
+    
+    
+    // TODO: Move to + generate
+    // TODO: Add steps, guiadance etc as optional params
+    public static func generate(localOrRemote modelURL: URL, prompt: String) async throws -> CGImage? {
+        
+        if shared.modelIsCold {
+            if modelURL.isFileURL {
+                try await shared.prepModels(localUrl: modelURL)
+            } else {
+                try await shared.prepModels(remoteURL: modelURL)
+            }
+        }
+        return await shared.generate(prompt: prompt)
+    }
+    
+    
+    
     
     private var saveMemory = false
-    
-    /// Initializes the main class with no side effects.
-    ///
-    /// ```
-    /// // Use a local folder
-    /// let diffusion = Diffusion(modelFolder: URL...))
-    ///
-    ///// Download a folder
-    /// let diffusion = Diffusion(modelZipURL: URL(string: "https://example.com/myfiles.zip")
-    ///
-    /// // Use directly in SwiftUI
-    /// @StateObject var Diffusion [...]
-    ///
-    /// ```
-    ///
-    /// - Parameters:
-    ///   - saveMemoryButBeSlower: Recommended for iOS or old macs
-    ///   - modelZipUrl: Optional. The destination on the web where you are hosting your converted model files. The class will download and extract the model files if the model folder is empty.
-    ///   - modelFolder: Optional. The local folder. Application Support is recommended as that will not require special permissions. If you don't provide a value, the class will a folder in Application Support using the bundle identifier.
-    ///
-    /// - Important: This will not load the models or start downloading. Call `loadModels` before you start generating. Don't forget to convert your model to bins first. See README
-    
-    
+
     public init(saveMemoryButBeSlower: Bool = false) {
         self.saveMemory = saveMemoryButBeSlower
         state.send(.notStarted)
@@ -57,11 +58,8 @@ public class Diffusion : ObservableObject {
     
 
     
+    // Prep models
     
-    /**
-     #Async wrappers
-     Creating async sequences for MD's callbacks
-     */
     
     /// Tuple type for easier access to the progress while also getting the full state.
     public typealias LoaderUpdate = (progress: Double, state: GeneratorState)
@@ -72,67 +70,62 @@ public class Diffusion : ObservableObject {
     
     
     public func prepModels(localUrl: URL, progress:((Double)->Void)? = nil) async throws {
-        print("prep: with localurl")
         let fetcher = ModelFetcher(local: localUrl)
         try await initModels(fetcher: fetcher, progress: progress)
     }
     
     public func prepModels(remoteURL: URL, progress:((Double)->Void)? = nil) async throws {
-        print("prep: with remote")
         let fetcher = ModelFetcher(remote: remoteURL)
         try await initModels(fetcher: fetcher, progress: progress)
     }
     
     public func prepModels(localUrl: URL, remoteUrl: URL, progress:((Double)->Void)? = nil) async throws {
-        print("prep: with remote and local")
         let fetcher = ModelFetcher(local: localUrl, remote: remoteUrl)
         try await initModels(fetcher: fetcher, progress: progress)
     }
+    
+    
+    // Init Models
+    
     
     private func initModels(
         fetcher:ModelFetcher,
         progress:((Double)->Void)?
     ) async throws {
 
-        // TODO: Don't use 2 steps if the model is downloaded
-        let combinedSteps = 2.0 // 1. fetch, 2. init
-        var combinedProgress = 0.0
+        var combinedSteps : Double = 1
+        var combinedProgress : Double = 0
         
-        print("prep: maybe downloading")
+        self.loadingProgress = 0.05
         
-        /// 1. Fetch the model and put it in the global var used by MD
-        global_modelFolder = try await fetcher.fetch { p in
-            combinedProgress = (p/combinedSteps)
-            print("fetcher says", p, "combined", combinedProgress)
-            self.updateLoadingProgress(progress: combinedProgress, message: "Fetching models")
+        /// 1. Fetch the model and put it in the global var used by core Maple Diffusion
+        if global_modelFolder == nil {
+            combinedSteps += 1
+            global_modelFolder = try await fetcher.fetch { p in
+                combinedProgress = (p/combinedSteps)
+                self.updateLoadingProgress(progress: combinedProgress, message: "Fetching models")
+            }
         }
         
         /// 2. instantiate MD, which has light side effects
         self.mapleDiffusion = MapleDiffusion(saveMemoryButBeSlower: saveMemory)
-        
-        print("prep: init start")
         
         let earlierProgress = combinedProgress
         
         /// 3. Initialize models on a background thread
         try await initModels() { p in
             combinedProgress = (p/combinedSteps) + earlierProgress
-            print("initmodel says", p, "combined", combinedProgress)
             self.updateLoadingProgress(progress: combinedProgress, message: "Loading models")
             progress?(combinedProgress)
         }
         
         /// 4. Done. Set published main status to true
         await MainActor.run {
-            print("model is now ready")
+            print("Model is ready")
             self.state.send(.ready)
             self.loadingProgress = 1
             self.isModelReady = true
         }
-        
-  
-        print("prep: init done")
-        
     }
     
     private func updateLoadingProgress(progress: Double, message:String) {
@@ -172,17 +165,18 @@ public class Diffusion : ObservableObject {
     ///  TODO: Use ModelFetcher here
     private func initModels(completion: @escaping (Float, String)->()) {
         mapleDiffusion.initModels { progress, stage in
-            print("DeepMD says:", progress, stage)
             
-            /// Workaround to start diffusion at launch rather than at first image. For the user, this makes the first image start immediately, at the tradeoff of a slower initial boot. We'll just throw it in there, without waiting for it
-            if progress == 1 {
-                Task.detached {
-                    print("Last stage!")
-                    self.mapleDiffusion.generate(prompt: "", negativePrompt: "", seed: 42, steps: 1, guidanceScale: 0) { _, progress, _ in
-                        print("diffusion started succesfully")
-                    }
-                }
-            }
+            /// Workaround to start diffusion at launch rather than at first image. If it finishes before the user submits their first generation request, the generator will start producing intermediate images immediately
+//            if progress == 1 {
+//                Task.detached {
+//                    print("Warming up diffuser in background")
+//                    self.generate(prompt: "", negativePrompt: "", seed: 42, steps: 2, guidanceScale: 0) { _, progress, _ in
+//                        if progress == 1 {
+//                            print("Warmed up")
+//                        }
+//                    }
+//                }
+//            }
             
             completion(progress, stage)
         }
