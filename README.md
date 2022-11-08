@@ -21,6 +21,9 @@ See `examples/SingleLineDiffusion` for a working example.
 ## As an observable object
 Let's add some UI. Here's an entire working image generator app in a single SwiftUI view:
 
+![https://github.com/mortenjust/maple-diffusion/blob/main/Examples/Demos/simple-diffusion.gif]()
+
+
 ```
 struct ContentView: View {
     
@@ -111,9 +114,9 @@ Yes. Just copy the `alpha*` files from the standard conversion. This repo will i
 ## Can I contribute? What's next?
 Yes! Some ideas
 
-[ ] Tighten up code quality overall. Most is proof of concept. 
-[ ] Add image-to-image 
-[ ] Add in-painting and out-painting
+- [ ] Tighten up code quality overall. Most is proof of concept. 
+- [ ] Add image-to-image 
+- [ ] Add in-painting and out-painting
 
 If you're making changes to the MPSGraph part of the codebase, consider making your contributions to the single-file repo and then integrate the changes in the wrapped file in this repo. 
 
