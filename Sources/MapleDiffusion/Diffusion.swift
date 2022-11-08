@@ -43,9 +43,6 @@ public class Diffusion : ObservableObject {
         return await shared.generate(prompt: prompt)
     }
     
-    
-    
-    
     private var saveMemory = false
 
     public init(saveMemoryButBeSlower: Bool = false) {

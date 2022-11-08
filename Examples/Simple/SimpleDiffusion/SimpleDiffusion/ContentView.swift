@@ -11,6 +11,7 @@ import Combine
 
 struct ContentView: View {
     
+    // 1
     @StateObject var sd = Diffusion()
     @State var prompt = ""
     @State var image : CGImage?
@@ -21,16 +22,23 @@ struct ContentView: View {
 
     var body: some View {
         VStack {
+            
             DiffusionImage(image: $image, progress: $progress)
             Spacer()
             TextField("Prompt", text: $prompt)
+            // 3
                 .onSubmit { self.imagePublisher = sd.generate(prompt: prompt) }
                 .disabled(!sd.isModelReady)
             ProgressView(value: anyProgress)
                 .opacity(anyProgress == 1 || anyProgress == 0 ? 0 : 1)
         }
-        .task { try! await
-            sd.prepModels(remoteURL: URL(string: "http://localhost:8080/Diffusion.zip")!) }
+        .task {
+            // 2
+            let path = URL(string: "http://localhost:8080/Diffusion.zip")!
+            try! await sd.prepModels(remoteURL: path)
+        }
+        
+        // 4
         .onReceive(imagePublisher) { r in
             self.image = r.image
             self.progress = r.progress
