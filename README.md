@@ -8,7 +8,7 @@ This is the Swift Package Manager wrapper of [Maple Diffusion](https://github.co
 ## One-line diffusion
 In its simplest form it's as simple as one line:
 
-```
+```swift
 let image = try? await Diffusion.generate(localOrRemote: modelUrl, prompt: "cat astronaut")
 ```
 
@@ -24,7 +24,7 @@ Let's add some UI. Here's an entire working image generator app in a single Swif
 ![GIF demo](https://github.com/mortenjust/maple-diffusion/blob/main/Examples/Demos/simple-diffusion.gif)
 
 
-```
+```swift
 struct ContentView: View {
     
     // 1
