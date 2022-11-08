@@ -21,7 +21,7 @@ See `examples/SingleLineDiffusion` for a working example.
 ## As an observable object
 Let's add some UI. Here's an entire working image generator app in a single SwiftUI view:
 
-![https://github.com/mortenjust/maple-diffusion/blob/main/Examples/Demos/simple-diffusion.gif]()
+![GIF demo](https://github.com/mortenjust/maple-diffusion/blob/main/Examples/Demos/simple-diffusion.gif)
 
 
 ```
