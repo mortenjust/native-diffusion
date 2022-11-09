@@ -86,26 +86,24 @@ public class Diffusion : ObservableObject {
     
     
     private func initModels(
-        fetcher:ModelFetcher,
-        progress:((Double)->Void)?
+        fetcher: ModelFetcher,
+        progress: ((Double)->Void)?
     ) async throws {
-
-        var combinedSteps : Double = 1
+        let combinedSteps : Double = 2
         var combinedProgress : Double = 0
         
-        self.loadingProgress = 0.05
+        await MainActor.run {
+            self.loadingProgress = 0.05
+        }
         
-        /// 1. Fetch the model and put it in the global var used by core Maple Diffusion
-        if global_modelFolder == nil {
-            combinedSteps += 1
-            global_modelFolder = try await fetcher.fetch { p in
-                combinedProgress = (p/combinedSteps)
-                self.updateLoadingProgress(progress: combinedProgress, message: "Fetching models")
-            }
+        /// 1. Fetch the model
+        let modelLocation: URL = try await fetcher.fetch { p in
+            combinedProgress = (p/combinedSteps)
+            self.updateLoadingProgress(progress: combinedProgress, message: "Fetching models")
         }
         
         /// 2. instantiate MD, which has light side effects
-        self.mapleDiffusion = MapleDiffusion(saveMemoryButBeSlower: saveMemory)
+        self.mapleDiffusion = MapleDiffusion(modelLocation: modelLocation, saveMemoryButBeSlower: saveMemory)
         
         let earlierProgress = combinedProgress
         
