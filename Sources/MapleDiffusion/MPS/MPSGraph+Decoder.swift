@@ -16,34 +16,36 @@ extension MPSGraph {
         x = makeConv(at: folder, xIn: x, name: "first_stage_model.post_quant_conv", outChannels: 4, khw: 1)
         x = makeConv(at: folder, xIn: x, name: name + ".conv_in", outChannels: 512, khw: 3)
         
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".mid.block_1", outChannels: 512)
-        x = makeDecoderAttention(at: folder, xIn: x, name: name + ".mid.attn_1")
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".mid.block_2", outChannels: 512)
+        // middle
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".mid.block_1", outChannels: 512)
+        x = makeCoderAttention(at: folder, xIn: x, name: name + ".mid.attn_1")
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".mid.block_2", outChannels: 512)
         
         // block 3
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.3.block.0", outChannels: 512)
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.3.block.1", outChannels: 512)
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.3.block.2", outChannels: 512)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.3.block.0", outChannels: 512)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.3.block.1", outChannels: 512)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.3.block.2", outChannels: 512)
         x = upsampleNearest(xIn: x)
         x = makeConv(at: folder, xIn: x, name: name + ".up.3.upsample.conv", outChannels: 512, khw: 3)
         
         // block 2
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.2.block.0", outChannels: 512)
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.2.block.1", outChannels: 512)
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.2.block.2", outChannels: 512)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.2.block.0", outChannels: 512)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.2.block.1", outChannels: 512)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.2.block.2", outChannels: 512)
         x = upsampleNearest(xIn: x)
         x = makeConv(at: folder, xIn: x, name: name + ".up.2.upsample.conv", outChannels: 512, khw: 3)
         
         // block 1
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.1.block.0", outChannels: 256)
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.1.block.1", outChannels: 256)
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.1.block.2", outChannels: 256)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.1.block.0", outChannels: 256)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.1.block.1", outChannels: 256)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.1.block.2", outChannels: 256)
         x = upsampleNearest(xIn: x)
         x = makeConv(at: folder, xIn: x, name: name + ".up.1.upsample.conv", outChannels: 256, khw: 3)
+        
         // block 0
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.0.block.0", outChannels: 128)
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.0.block.1", outChannels: 128)
-        x = makeDecoderResBlock(at: folder, xIn: x, name: name + ".up.0.block.2", outChannels: 128)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.0.block.0", outChannels: 128)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.0.block.1", outChannels: 128)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".up.0.block.2", outChannels: 128)
         
         x = makeGroupNormSwish(at: folder, xIn: x, name: name + ".norm_out")
         x = makeConv(at: folder, xIn: x, name: name + ".conv_out", outChannels: 3, khw: 3)
@@ -51,8 +53,55 @@ extension MPSGraph {
         x = multiplication(x, constant(0.5, dataType: MPSDataType.float16), name: nil)
         return makeByteConverter(xIn: x)
     }
-
-    func makeDecoderResBlock(at folder: URL, xIn: MPSGraphTensor, name: String, outChannels: NSNumber) -> MPSGraphTensor {
+    
+    func makeEncoder(at folder: URL, xIn: MPSGraphTensor) -> MPSGraphTensor {
+        var x = xIn
+        // TODO: Convert image
+        x = cast(xIn, to: .float16, name: nil)
+        x = division(x, constant(255.0, shape: [1], dataType: .float16), name: nil)
+        x = round(with: x, name: nil)
+        x = expandDims(x, axis: 0, name: nil)
+        x = multiplication(x, constant(2.0, shape: [1], dataType: .float16), name: nil)
+        x = subtraction(x, constant(1.0, shape: [1], dataType: .float16), name: nil)
+        
+        let name = "first_stage_model.encoder"
+        x = makeConv(at: folder, xIn: x, name: name + ".conv_in", outChannels: 128, khw: 3)
+        
+        // block 0
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".down.0.block.0", outChannels: 128)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".down.0.block.1", outChannels: 128)
+        x = downsampleNearest(xIn: x)
+        x = makeConv(at: folder, xIn: x, name: name + ".down.0.downsample.conv", outChannels: 128, khw: 3)
+        
+        // block 1
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".down.1.block.0", outChannels: 256)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".down.1.block.1", outChannels: 256)
+        x = downsampleNearest(xIn: x)
+        x = makeConv(at: folder, xIn: x, name: name + ".down.1.downsample.conv", outChannels: 256, khw: 3)
+        
+        // block 2
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".down.2.block.0", outChannels: 512)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".down.2.block.1", outChannels: 512)
+        x = downsampleNearest(xIn: x)
+        x = makeConv(at: folder, xIn: x, name: name + ".down.2.downsample.conv", outChannels: 512, khw: 3)
+        
+        // block 3
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".down.3.block.0", outChannels: 512)
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".down.3.block.1", outChannels: 512)
+        
+        // middle
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".mid.block_1", outChannels: 512)
+        x = makeCoderAttention(at: folder, xIn: x, name: name + ".mid.attn_1")
+        x = makeCoderResBlock(at: folder, xIn: x, name: name + ".mid.block_2", outChannels: 512)
+        
+        x = makeGroupNormSwish(at: folder, xIn: x, name: name + ".norm_out")
+        x = makeConv(at: folder, xIn: x, name: name + ".conv_out", outChannels: 8, khw: 3)
+        
+//        x = division(x, constant(1 / 0.18215, dataType: MPSDataType.float16), name: "rescale")
+        return makeConv(at: folder, xIn: x, name: "first_stage_model.quant_conv", outChannels: 8, khw: 1)
+    }
+    
+    fileprivate func makeCoderResBlock(at folder: URL, xIn: MPSGraphTensor, name: String, outChannels: NSNumber) -> MPSGraphTensor {
         var x = xIn
         x = makeGroupNormSwish(at: folder, xIn: x, name: name + ".norm1")
         x = makeConv(at: folder, xIn: x, name: name + ".conv1", outChannels: outChannels, khw: 3)
@@ -65,7 +114,7 @@ extension MPSGraph {
         return addition(x, xIn, name: "skip")
     }
 
-    func makeDecoderAttention(at folder: URL, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
+    fileprivate func makeCoderAttention(at folder: URL, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
         var x = makeGroupNorm(at: folder, xIn: xIn, name: name + ".norm")
         let c = x.shape![3]
         x = reshape(x, shape: [x.shape![0], NSNumber(value:x.shape![1].intValue * x.shape![2].intValue), c], name: nil)

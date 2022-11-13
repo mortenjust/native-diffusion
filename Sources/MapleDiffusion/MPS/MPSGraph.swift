@@ -106,7 +106,7 @@ extension MPSGraph {
         x = multiplication(x, constant(255, shape: [1], dataType: MPSDataType.float16), name: nil)
         x = round(with: x, name: nil)
         x = cast(x, to: MPSDataType.uInt8, name: "cast to uint8 rgba")
-        let alpha = constant(255, shape: [1,  x.shape![1], x.shape![2], 1], dataType: MPSDataType.uInt8)
+        let alpha = constant(255, shape: [1, x.shape![1], x.shape![2], 1], dataType: MPSDataType.uInt8)
         return concatTensors([x, alpha], dimension: 3, name: nil)
     }
     
@@ -142,6 +142,17 @@ extension MPSGraph {
         let xPrevBase = multiplication(squareRoot(with: alphaPrevIn, name: nil), predX0, name:nil)
         return addition(xPrevBase, dirX, name: nil)
     }
+    
+    func stochasticEncode(at folder: URL, stepIn: MPSGraphTensor, timestepsIn: MPSGraphTensor, imageIn: MPSGraphTensor, noiseIn: MPSGraphTensor) -> MPSGraphTensor {
+        let alphasCumprod = loadConstant(at: folder, name: "alphas_cumprod", shape: [1000])
+        let alphas = gatherAlongAxis(0, updates: alphasCumprod, indices: timestepsIn, name: nil)
+        let sqrtAlphasCumprod = squareRoot(with: alphas, name: nil)
+        let sqrtOneMinusAlphasCumprod = squareRootOfOneMinus(alphas)
+        
+        let imageAlphas = multiplication(extractIntoTensor(a: sqrtAlphasCumprod, t: stepIn, shape: imageIn.shape!), imageIn, name: nil)
+        let noiseAlphas = multiplication(extractIntoTensor(a: sqrtOneMinusAlphasCumprod, t: stepIn, shape: imageIn.shape!), noiseIn, name: nil)
+        return addition(imageAlphas, noiseAlphas, name: nil)
+    }
 }
 
 // MARK: Operations
@@ -166,6 +177,21 @@ extension MPSGraph {
         )
     }
     
+    func downsampleNearest(xIn: MPSGraphTensor, scaleFactor: Int = 2) -> MPSGraphTensor {
+        return resize(
+            xIn,
+            size: [
+                NSNumber(value:xIn.shape![1].intValue / scaleFactor),
+                NSNumber(value:xIn.shape![2].intValue / scaleFactor)
+            ],
+            mode: MPSGraphResizeMode.nearest,
+            centerResult: true,
+            alignCorners: false,
+            layout: MPSGraphTensorNamedDataLayout.NHWC,
+            name: nil
+        )
+    }
+    
     func squareRootOfOneMinus(_ tensor: MPSGraphTensor) -> MPSGraphTensor {
         return squareRoot(with: subtraction(constant(1.0, dataType: MPSDataType.float16), tensor, name: nil), name: nil)
     }
@@ -178,5 +204,21 @@ extension MPSGraph {
         x = addition(x, constant(1, dataType: MPSDataType.float16), name: nil)
         x = multiplication(x, constant(0.5, dataType: MPSDataType.float16), name: nil)
         return multiplication(tensor, x, name: nil)
+    }
+    
+    func diagonalGaussianDistribution(_ tensor: MPSGraphTensor, noise: MPSGraphTensor) -> MPSGraphTensor {
+        let chunks = split(tensor, numSplits: 2, axis: 3, name: nil)
+        let mean = chunks[0]
+        let logvar = clamp(chunks[1],
+                           min: constant(-30, shape: [1], dataType: MPSDataType.float16),
+                           max: constant(20, shape: [1], dataType: MPSDataType.float16),
+                           name: nil)
+        let std = exponent(with: multiplication(constant(0.5, shape: [1], dataType: MPSDataType.float16), logvar, name: nil), name: nil)
+        return addition(mean, multiplication(std, noise, name: nil), name: nil)
+    }
+    
+    func extractIntoTensor(a: MPSGraphTensor, t: MPSGraphTensor, shape: [NSNumber]) -> MPSGraphTensor {
+        let out = gatherAlongAxis(-1, updates: a, indices: t, name: nil)
+        return reshape(out, shape: [t.shape!.first!] + [NSNumber](repeating: 1, count: shape.count-1), name: nil)
     }
 }

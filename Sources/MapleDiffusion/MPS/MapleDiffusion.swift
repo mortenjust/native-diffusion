@@ -185,6 +185,39 @@ class MapleDiffusion {
         return decoderGraph.run(with: commandQueue, feeds: [decoderIn: x], targetTensors: [decoderOut], targetOperations: nil)[decoderOut]!
     }
     
+    private func initLatent(image: CGImage, tEnc: Int, timesteps: [Int], seed: Int) -> MPSGraphTensorData {
+        // MEM-HACK: encoder is loaded from disc and deallocated to save memory (at cost of latency)
+        
+        let imageData = MPSGraphTensorData(device: graphDevice, cgImage: image)
+        
+        let graph = MPSGraph(synchronize: shouldSynchronize)
+        let encoderIn = graph.placeholder(shape: imageData.shape, dataType: MPSDataType.uInt8, name: nil)
+        let encoderOut = graph.makeEncoder(at: modelLocation, xIn: encoderIn)
+        let gaussianNoise = graph.randomTensor(withShape: [1, height, width, 4], descriptor: MPSGraphRandomOpDescriptor(distribution: .normal, dataType: .float16)!, seed: seed, name: nil)
+        let gaussianOut = graph.diagonalGaussianDistribution(encoderOut, noise: gaussianNoise)
+        
+        let stepData = [Int32(tEnc)].withUnsafeBufferPointer { Data(buffer: $0) }
+        let stepMPSData = MPSGraphTensorData(device: graphDevice, data: stepData, shape: [1], dataType: MPSDataType.int32)
+        let stepIn = graph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
+        let timestepsData = timesteps.map { Int32($0) }.withUnsafeBufferPointer { Data(buffer: $0) }
+        let timestepsMPSData = MPSGraphTensorData(device: graphDevice, data: timestepsData, shape: [NSNumber(value: timesteps.count)], dataType: MPSDataType.int32)
+        let timestepsIn = graph.placeholder(shape: [NSNumber(value: timesteps.count)], dataType: MPSDataType.int32, name: nil)
+        
+        let noise = graph.randomTensor(withShape: [1, height, width, 4], descriptor: MPSGraphRandomOpDescriptor(distribution: .normal, dataType: .float16)!, seed: seed, name: nil)
+        let stochasticEncode = graph.stochasticEncode(at: modelLocation, stepIn: stepIn, timestepsIn: timestepsIn, imageIn: gaussianOut, noiseIn: noise)
+        
+        return graph.run(
+            with: commandQueue,
+            feeds: [
+                encoderIn: imageData,
+                stepIn: stepMPSData,
+                timestepsIn: timestepsMPSData
+            ], targetTensors: [
+                gaussianNoise, noise, encoderOut, gaussianOut, stochasticEncode
+            ], targetOperations: nil
+        )[stochasticEncode]!
+    }
+    
     private func reorderAnUnexpectedJourney(x: [MPSGraphTensorData]) -> [MPSGraphTensorData] {
         var out = [MPSGraphTensorData]()
         for r in unetAnUnexpectedJourneyExecutable!.feedTensors! {
@@ -326,12 +359,13 @@ class MapleDiffusion {
         guidanceScale: Float,
         completion: @escaping (CGImage?, Float, String)->()
     ) -> MPSGraphTensorData {
+        assert(strength >= 0 && strength <= 1, "Invalid strength value \(strength)")
         completion(nil, 0, "Tokenizing...")
         
         // 1. String -> Tokens
         let baseTokens = tokenizer.encode(s: negativePrompt)
         let tokens = tokenizer.encode(s: prompt)
-        completion(nil, 0.25 * 1 / Float(steps), "Encoding...")
+        completion(initImage, 0.25 * 1 / Float(steps), "Encoding...")
         
         // 2. Tokens -> Embedding
         let (baseGuidance, textGuidance) = runTextGuidance(baseTokens: baseTokens, tokens: tokens)
@@ -339,24 +373,25 @@ class MapleDiffusion {
             // MEM-HACK unload the text guidance to fit the unet
             textGuidanceExecutable = nil
         }
-        completion(nil, 0.5 * 1 / Float(steps), "Generating noise...")
+        completion(initImage, 0.5 * 1 / Float(steps), "Generating noise...")
         
 //         3. Noise generation
-        var latent = randomLatent(seed: seed)
-//        var latent = MPSGraphTensorData(device: graphDevice, data: initImage, shape: <#T##[NSNumber]#>, dataType: <#T##MPSDataType#>)
-        let adjustedSteps = Int(Float(steps) * strength)
-        let timesteps = Array<Int>(stride(from: 1, to: 1000, by: Int(1000 / adjustedSteps)))
+        let timestepSize = 1000 / steps
+        let tEnc = Int(Float(steps) * strength)
+        let timesteps = Array<Int>(stride(from: 1, to: 1001, by: timestepSize))
+        var latent = initLatent(image: initImage, tEnc: tEnc, timesteps: timesteps, seed: seed)
         completion(nil, 0.75 * 1 / Float(steps), "Starting diffusion...")
         
         // 4. Diffusion
-        for t in (0..<timesteps.count).reversed() {
+        let actualTimesteps = Array<Int>(stride(from: 1, to: tEnc * timestepSize + 1, by: timestepSize))
+        for t in (0..<actualTimesteps.count).reversed() {
             let tick = CFAbsoluteTimeGetCurrent()
             
             // step
-            let tsPrev = t > 0 ? timesteps[t - 1] : timesteps[t] - 1000 / adjustedSteps
+            let tsPrev = t > 0 ? actualTimesteps[t - 1] : actualTimesteps[t] - timestepSize
             let tData = [Int32(timesteps[t])].withUnsafeBufferPointer {Data(buffer: $0)}
             let tMPSData = MPSGraphTensorData(device: graphDevice, data: tData, shape: [1], dataType: MPSDataType.int32)
-            let tPrevData = [Int32(tsPrev)].withUnsafeBufferPointer {Data(buffer: $0)}
+            let tPrevData = [Int32(tsPrev)].withUnsafeBufferPointer { Data(buffer: $0) }
             let tPrevMPSData = MPSGraphTensorData(device: graphDevice, data: tPrevData, shape: [1], dataType: MPSDataType.int32)
             let guidanceScaleData = [Float32(guidanceScale)].withUnsafeBufferPointer {Data(buffer: $0)}
             let guidanceScaleMPSData = MPSGraphTensorData(device: graphDevice, data: guidanceScaleData, shape: [1], dataType: MPSDataType.float32)
