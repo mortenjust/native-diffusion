@@ -97,7 +97,6 @@ extension MPSGraph {
         x = makeGroupNormSwish(at: folder, xIn: x, name: name + ".norm_out")
         x = makeConv(at: folder, xIn: x, name: name + ".conv_out", outChannels: 8, khw: 3)
         
-//        x = division(x, constant(1 / 0.18215, dataType: MPSDataType.float16), name: "rescale")
         return makeConv(at: folder, xIn: x, name: "first_stage_model.quant_conv", outChannels: 8, khw: 1)
     }
     

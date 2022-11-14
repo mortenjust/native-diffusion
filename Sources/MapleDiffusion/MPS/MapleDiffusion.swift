@@ -38,27 +38,29 @@ class MapleDiffusion {
     let shouldSynchronize: Bool
     let modelLocation: URL
     
-    // text tokenization
-    let tokenizer: BPETokenizer
-    
     // text guidance
-    var textGuidanceExecutable: MPSGraphExecutable?
+    private var _textGuidance: TextGuidance?
+    var textGuidance: TextGuidance {
+        if let _textGuidance {
+            return _textGuidance
+        }
+        let textGuidance = TextGuidance(
+            synchronize: shouldSynchronize,
+            device: graphDevice,
+            modelLocation: modelLocation
+        )
+        _textGuidance = textGuidance
+        return textGuidance
+    }
     
-    // time embedding
-    let tembGraph: MPSGraph
-    let tembTIn: MPSGraphTensor
-    let tembOut: MPSGraphTensor
-    
-    // diffusion
-    let diffGraph: MPSGraph
-    let diffGuidanceScaleIn: MPSGraphTensor
-    let diffXIn: MPSGraphTensor
-    let diffEtaUncondIn: MPSGraphTensor
-    let diffEtaCondIn: MPSGraphTensor
-    let diffTIn: MPSGraphTensor
-    let diffTPrevIn: MPSGraphTensor
-    let diffOut: MPSGraphTensor
-    let diffAuxOut: MPSGraphTensor
+    lazy var diffuser: Diffuser = {
+        Diffuser(
+            synchronize: shouldSynchronize,
+            device: graphDevice,
+            modelLocation: modelLocation,
+            shape: [1, height, width, 4]
+        )
+    }()
     
     // unet
     // MEM-HACK: split into subgraphs
@@ -80,32 +82,9 @@ class MapleDiffusion {
         graphDevice = MPSGraphDevice(mtlDevice: device)
         commandQueue = device.makeCommandQueue()!
         shouldSynchronize = !device.hasUnifiedMemory
-        
-        // text tokenization
-        tokenizer = BPETokenizer(modelLocation: modelLocation)
-        
-        // time embedding
-        tembGraph = MPSGraph(synchronize: shouldSynchronize)
-        tembTIn = tembGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        tembOut = tembGraph.makeTimeFeatures(at: modelLocation, tIn: tembTIn)
-        
-        // diffusion
-        diffGraph = MPSGraph(synchronize: shouldSynchronize)
-        diffXIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-        diffEtaUncondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-        diffEtaCondIn = diffGraph.placeholder(shape: [1, height, width, 4], dataType: MPSDataType.float16, name: nil)
-        diffTIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        diffTPrevIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        diffGuidanceScaleIn = diffGraph.placeholder(shape: [1], dataType: MPSDataType.float32, name: nil)
-        diffOut = diffGraph.makeDiffusionStep(at: modelLocation, xIn: diffXIn, etaUncondIn: diffEtaUncondIn, etaCondIn: diffEtaCondIn, tIn: diffTIn, tPrevIn: diffTPrevIn, guidanceScaleIn: diffGraph.cast(diffGuidanceScaleIn, to: MPSDataType.float16, name: "this string must not be the empty string"))
-        diffAuxOut = diffGraph.makeAuxUpsampler(at: modelLocation, xIn: diffOut)
     }
     
     public func initModels(completion: (Float, String)->()) {
-        // text guidance
-        completion(0, "Loading text guidance...")
-        initTextGuidance()
-        
         // unet
         completion(0.25, "Loading UNet part 1/3...")
         initAnUnexpectedJourney()
@@ -114,15 +93,6 @@ class MapleDiffusion {
         completion(0.75, "Loading UNet part 3/3...")
         initTheBattleOfTheFiveArmies()
         completion(1, "Loaded models")
-    }
-    
-    private func initTextGuidance() {
-        let graph = MPSGraph(synchronize: shouldSynchronize)
-        let textGuidanceIn = graph.placeholder(shape: [2, 77], dataType: MPSDataType.int32, name: nil)
-        let textGuidanceOut = graph.makeTextGuidance(at: modelLocation, xIn: textGuidanceIn, name: "cond_stage_model.transformer.text_model")
-        let textGuidanceOut0 = graph.sliceTensor(textGuidanceOut, dimension: 0, start: 0, length: 1, name: nil)
-        let textGuidanceOut1 = graph.sliceTensor(textGuidanceOut, dimension: 0, start: 1, length: 1, name: nil)
-        textGuidanceExecutable = graph.compile(with: graphDevice, feeds: [textGuidanceIn: MPSGraphShapedType(shape: textGuidanceIn.shape, dataType: MPSDataType.int32)], targetTensors: [textGuidanceOut0, textGuidanceOut1], targetOperations: nil, compilationDescriptor: nil)
     }
     
     private func initAnUnexpectedJourney() {
@@ -169,11 +139,13 @@ class MapleDiffusion {
         return graph.run(with: commandQueue, feeds: [:], targetTensors: [out], targetOperations: nil)[out]!
     }
     
-    private func runTextGuidance(baseTokens: [Int], tokens: [Int]) -> (MPSGraphTensorData, MPSGraphTensorData) {
-        let tokensData = (baseTokens + tokens).map({Int32($0)}).withUnsafeBufferPointer {Data(buffer: $0)}
-        let tokensMPSData = MPSGraphTensorData(device: graphDevice, data: tokensData, shape: [2, 77], dataType: MPSDataType.int32)
-        let res = textGuidanceExecutable!.run(with: commandQueue, inputs: [tokensMPSData], results: nil, executionDescriptor: nil)
-        return (res[0], res[1])
+    private func runTextGuidance(prompt: String, negativePrompt: String) -> (MPSGraphTensorData, MPSGraphTensorData) {
+        let guidance = textGuidance.run(with: commandQueue, prompt: prompt, negativePrompt: negativePrompt)
+        if saveMemory {
+            // MEM-HACK unload the text guidance to fit the unet
+            _textGuidance = nil
+        }
+        return guidance
     }
     
     private func loadDecoderAndGetFinalImage(xIn: MPSGraphTensorData) -> MPSGraphTensorData {
@@ -185,7 +157,7 @@ class MapleDiffusion {
         return decoderGraph.run(with: commandQueue, feeds: [decoderIn: x], targetTensors: [decoderOut], targetOperations: nil)[decoderOut]!
     }
     
-    private func initLatent(image: CGImage, tEnc: Int, timesteps: [Int], seed: Int) -> MPSGraphTensorData {
+    private func initLatent(image: CGImage, tEnc: Int, timesteps: MPSGraphTensorData, seed: Int) -> MPSGraphTensorData {
         // MEM-HACK: encoder is loaded from disc and deallocated to save memory (at cost of latency)
         
         let imageData = MPSGraphTensorData(device: graphDevice, cgImage: image)
@@ -195,25 +167,23 @@ class MapleDiffusion {
         let encoderOut = graph.makeEncoder(at: modelLocation, xIn: encoderIn)
         let gaussianNoise = graph.randomTensor(withShape: [1, height, width, 4], descriptor: MPSGraphRandomOpDescriptor(distribution: .normal, dataType: .float16)!, seed: seed, name: nil)
         let gaussianOut = graph.diagonalGaussianDistribution(encoderOut, noise: gaussianNoise)
+        let scaled = graph.multiplication(gaussianOut, graph.constant(0.18215, dataType: MPSDataType.float16), name: "rescale")
         
-        let stepData = [Int32(tEnc)].withUnsafeBufferPointer { Data(buffer: $0) }
-        let stepMPSData = MPSGraphTensorData(device: graphDevice, data: stepData, shape: [1], dataType: MPSDataType.int32)
+        let stepData = tEnc.tensorData(device: graphDevice)
         let stepIn = graph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        let timestepsData = timesteps.map { Int32($0) }.withUnsafeBufferPointer { Data(buffer: $0) }
-        let timestepsMPSData = MPSGraphTensorData(device: graphDevice, data: timestepsData, shape: [NSNumber(value: timesteps.count)], dataType: MPSDataType.int32)
-        let timestepsIn = graph.placeholder(shape: [NSNumber(value: timesteps.count)], dataType: MPSDataType.int32, name: nil)
+        let timestepsIn = graph.placeholder(shape: timesteps.shape, dataType: MPSDataType.int32, name: nil)
         
         let noise = graph.randomTensor(withShape: [1, height, width, 4], descriptor: MPSGraphRandomOpDescriptor(distribution: .normal, dataType: .float16)!, seed: seed, name: nil)
-        let stochasticEncode = graph.stochasticEncode(at: modelLocation, stepIn: stepIn, timestepsIn: timestepsIn, imageIn: gaussianOut, noiseIn: noise)
+        let stochasticEncode = graph.stochasticEncode(at: modelLocation, stepIn: stepIn, timestepsIn: timestepsIn, imageIn: scaled, noiseIn: noise)
         
         return graph.run(
             with: commandQueue,
             feeds: [
                 encoderIn: imageData,
-                stepIn: stepMPSData,
-                timestepsIn: timestepsMPSData
+                stepIn: stepData,
+                timestepsIn: timesteps
             ], targetTensors: [
-                gaussianNoise, noise, encoderOut, gaussianOut, stochasticEncode
+                gaussianNoise, noise, encoderOut, gaussianOut, scaled, stochasticEncode
             ], targetOperations: nil
         )[stochasticEncode]!
     }
@@ -273,37 +243,26 @@ class MapleDiffusion {
     private func generateLatent(prompt: String, negativePrompt: String, seed: Int, steps: Int, guidanceScale: Float, completion: @escaping (CGImage?, Float, String)->()) -> MPSGraphTensorData {
         completion(nil, 0, "Tokenizing...")
         
-        // 1. String -> Tokens
-        let baseTokens = tokenizer.encode(s: negativePrompt)
-        let tokens = tokenizer.encode(s: prompt)
-        completion(nil, 0.25 * 1 / Float(steps), "Encoding...")
+        // 1. String -> Embedding
+        let guidanceScaleData = [Float32(guidanceScale)].withUnsafeBufferPointer {Data(buffer: $0)}
+        let guidanceScaleMPSData = MPSGraphTensorData(device: graphDevice, data: guidanceScaleData, shape: [1], dataType: MPSDataType.float32)
         
-        // 2. Tokens -> Embedding
-        let (baseGuidance, textGuidance) = runTextGuidance(baseTokens: baseTokens, tokens: tokens)
-        if (saveMemory) {
-            // MEM-HACK unload the text guidance to fit the unet
-            textGuidanceExecutable = nil
-        }
+        let (baseGuidance, textGuidance) = runTextGuidance(prompt: prompt, negativePrompt: negativePrompt)
         completion(nil, 0.5 * 1 / Float(steps), "Generating noise...")
         
         // 3. Noise generation
+        let scheduler = Scheduler(synchronize: shouldSynchronize, device: graphDevice, modelLocation: modelLocation, steps: steps)
         var latent = randomLatent(seed: seed)
-        let timesteps = Array<Int>(stride(from: 1, to: 1000, by: Int(1000 / steps)))
         completion(nil, 0.75 * 1 / Float(steps), "Starting diffusion...")
         
         // 4. Diffusion
-        for t in (0..<timesteps.count).reversed() {
+        for (index, timestep) in scheduler.timesteps.enumerated().reversed() {
             let tick = CFAbsoluteTimeGetCurrent()
+            print("Step \(index):", timestep)
             
             // step
-            let tsPrev = t > 0 ? timesteps[t - 1] : timesteps[t] - 1000 / steps
-            let tData = [Int32(timesteps[t])].withUnsafeBufferPointer {Data(buffer: $0)}
-            let tMPSData = MPSGraphTensorData(device: graphDevice, data: tData, shape: [1], dataType: MPSDataType.int32)
-            let tPrevData = [Int32(tsPrev)].withUnsafeBufferPointer {Data(buffer: $0)}
-            let tPrevMPSData = MPSGraphTensorData(device: graphDevice, data: tPrevData, shape: [1], dataType: MPSDataType.int32)
-            let guidanceScaleData = [Float32(guidanceScale)].withUnsafeBufferPointer {Data(buffer: $0)}
-            let guidanceScaleMPSData = MPSGraphTensorData(device: graphDevice, data: guidanceScaleData, shape: [1], dataType: MPSDataType.float32)
-            let temb = tembGraph.run(with: commandQueue, feeds: [tembTIn: tMPSData], targetTensors: [tembOut], targetOperations: nil)[tembOut]!
+            let temb = scheduler.run(with: commandQueue, timestep: timestep)
+            
             let etaUncond: MPSGraphTensorData
             let etaCond: MPSGraphTensorData
             if (saveMemory) {
@@ -313,15 +272,23 @@ class MapleDiffusion {
             } else {
                 (etaUncond, etaCond) = runBatchedUNet(latent: latent, baseGuidance: baseGuidance, textGuidance: textGuidance, temb: temb)
             }
-            let res = diffGraph.run(with: commandQueue, feeds: [diffXIn: latent, diffEtaUncondIn: etaUncond, diffEtaCondIn: etaCond, diffTIn: tMPSData, diffTPrevIn: tPrevMPSData, diffGuidanceScaleIn: guidanceScaleMPSData], targetTensors: [diffOut, diffAuxOut], targetOperations: nil)
-            latent = res[diffOut]!
+            let (newLatent, auxOut) = diffuser.run(
+                with: commandQueue,
+                latent: latent,
+                timestep: timestep,
+                timestepSize: scheduler.timestepSize,
+                etaUncond: etaUncond,
+                etaCond: etaCond,
+                guidanceScale: guidanceScaleMPSData
+            )
+            latent = newLatent
             
             // update ui
             let tock = CFAbsoluteTimeGetCurrent()
             let stepRuntime = String(format:"%.2fs", tock - tick)
-            let progressDesc = t == 0 ? "Decoding..." : "Step \(timesteps.count - t) / \(timesteps.count) (\(stepRuntime) / step)"
-            let outImage = res[diffAuxOut]?.cgImage
-            completion(outImage, Float(timesteps.count - t) / Float(timesteps.count), progressDesc)
+            let progressDesc = index == 0 ? "Decoding..." : "Step \(scheduler.timesteps.count - index) / \(scheduler.timesteps.count) (\(stepRuntime) / step)"
+            let outImage = auxOut?.cgImage
+            completion(outImage, Float(scheduler.timesteps.count - index) / Float(scheduler.timesteps.count), progressDesc)
         }
         return latent
     }
@@ -345,7 +312,6 @@ class MapleDiffusion {
             initAnUnexpectedJourney()
             initTheDesolationOfSmaug()
             initTheBattleOfTheFiveArmies()
-            initTextGuidance()
         }
     }
     
@@ -360,42 +326,29 @@ class MapleDiffusion {
         completion: @escaping (CGImage?, Float, String)->()
     ) -> MPSGraphTensorData {
         assert(strength >= 0 && strength <= 1, "Invalid strength value \(strength)")
-        completion(nil, 0, "Tokenizing...")
+        completion(initImage, 0, "Tokenizing...")
         
-        // 1. String -> Tokens
-        let baseTokens = tokenizer.encode(s: negativePrompt)
-        let tokens = tokenizer.encode(s: prompt)
-        completion(initImage, 0.25 * 1 / Float(steps), "Encoding...")
+        // 1. String -> Embedding
+        let guidanceScaleData = [Float32(guidanceScale)].withUnsafeBufferPointer {Data(buffer: $0)}
+        let guidanceScaleMPSData = MPSGraphTensorData(device: graphDevice, data: guidanceScaleData, shape: [1], dataType: MPSDataType.float32)
         
-        // 2. Tokens -> Embedding
-        let (baseGuidance, textGuidance) = runTextGuidance(baseTokens: baseTokens, tokens: tokens)
-        if (saveMemory) {
-            // MEM-HACK unload the text guidance to fit the unet
-            textGuidanceExecutable = nil
-        }
+        let (baseGuidance, textGuidance) = runTextGuidance(prompt: prompt, negativePrompt: negativePrompt)
         completion(initImage, 0.5 * 1 / Float(steps), "Generating noise...")
         
-//         3. Noise generation
-        let timestepSize = 1000 / steps
+        // 2. Noise generation
+        let scheduler = Scheduler(synchronize: shouldSynchronize, device: graphDevice, modelLocation: modelLocation, steps: steps)
         let tEnc = Int(Float(steps) * strength)
-        let timesteps = Array<Int>(stride(from: 1, to: 1001, by: timestepSize))
-        var latent = initLatent(image: initImage, tEnc: tEnc, timesteps: timesteps, seed: seed)
+        var latent = initLatent(image: initImage, tEnc: tEnc, timesteps: scheduler.timestepsData, seed: seed)
+        
         completion(nil, 0.75 * 1 / Float(steps), "Starting diffusion...")
         
-        // 4. Diffusion
-        let actualTimesteps = Array<Int>(stride(from: 1, to: tEnc * timestepSize + 1, by: timestepSize))
-        for t in (0..<actualTimesteps.count).reversed() {
+        // 3. Diffusion
+        for (index, timestep) in scheduler.timesteps[0..<tEnc].enumerated().reversed() {
             let tick = CFAbsoluteTimeGetCurrent()
             
             // step
-            let tsPrev = t > 0 ? actualTimesteps[t - 1] : actualTimesteps[t] - timestepSize
-            let tData = [Int32(timesteps[t])].withUnsafeBufferPointer {Data(buffer: $0)}
-            let tMPSData = MPSGraphTensorData(device: graphDevice, data: tData, shape: [1], dataType: MPSDataType.int32)
-            let tPrevData = [Int32(tsPrev)].withUnsafeBufferPointer { Data(buffer: $0) }
-            let tPrevMPSData = MPSGraphTensorData(device: graphDevice, data: tPrevData, shape: [1], dataType: MPSDataType.int32)
-            let guidanceScaleData = [Float32(guidanceScale)].withUnsafeBufferPointer {Data(buffer: $0)}
-            let guidanceScaleMPSData = MPSGraphTensorData(device: graphDevice, data: guidanceScaleData, shape: [1], dataType: MPSDataType.float32)
-            let temb = tembGraph.run(with: commandQueue, feeds: [tembTIn: tMPSData], targetTensors: [tembOut], targetOperations: nil)[tembOut]!
+            let temb = scheduler.run(with: commandQueue, timestep: timestep)
+            
             let etaUncond: MPSGraphTensorData
             let etaCond: MPSGraphTensorData
             if (saveMemory) {
@@ -405,27 +358,23 @@ class MapleDiffusion {
             } else {
                 (etaUncond, etaCond) = runBatchedUNet(latent: latent, baseGuidance: baseGuidance, textGuidance: textGuidance, temb: temb)
             }
-            let res = diffGraph.run(
+            let (newLatent, auxOut) = diffuser.run(
                 with: commandQueue,
-                feeds: [
-                    diffXIn: latent,
-                    diffEtaUncondIn: etaUncond,
-                    diffEtaCondIn: etaCond,
-                    diffTIn: tMPSData,
-                    diffTPrevIn: tPrevMPSData,
-                    diffGuidanceScaleIn: guidanceScaleMPSData
-                ],
-                targetTensors: [diffOut, diffAuxOut],
-                targetOperations: nil
+                latent: latent,
+                timestep: timestep,
+                timestepSize: scheduler.timestepSize,
+                etaUncond: etaUncond,
+                etaCond: etaCond,
+                guidanceScale: guidanceScaleMPSData
             )
-            latent = res[diffOut]!
+            latent = newLatent
             
             // update ui
             let tock = CFAbsoluteTimeGetCurrent()
             let stepRuntime = String(format:"%.2fs", tock - tick)
-            let progressDesc = t == 0 ? "Decoding..." : "Step \(timesteps.count - t) / \(timesteps.count) (\(stepRuntime) / step)"
-            let outImage = res[diffAuxOut]?.cgImage
-            completion(outImage, Float(timesteps.count - t) / Float(timesteps.count), progressDesc)
+            let progressDesc = index == 0 ? "Decoding..." : "Step \(scheduler.timesteps.count - index) / \(scheduler.timesteps.count) (\(stepRuntime) / step)"
+            let outImage = auxOut?.cgImage
+            completion(outImage, Float(scheduler.timesteps.count - index) / Float(scheduler.timesteps.count), progressDesc)
         }
         return latent
     }
@@ -440,6 +389,7 @@ class MapleDiffusion {
         guidanceScale: Float,
         completion: @escaping (CGImage?, Float, String)->()
     ) {
+        let tick = CFAbsoluteTimeGetCurrent()
         let latent = generateLatent(initImage: initImage, prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: steps, strength: strength, guidanceScale: guidanceScale, completion: completion)
         
         if (saveMemory) {
@@ -452,14 +402,15 @@ class MapleDiffusion {
         // 5. Decoder
         let decoderRes = loadDecoderAndGetFinalImage(xIn: latent)
         completion(decoderRes.cgImage, 1.0, "Cooling down...")
+        let tock = CFAbsoluteTimeGetCurrent()
+        let runtime = String(format:"%.2fs", tock - tick)
+        print("Time", runtime)
         
         if (saveMemory) {
             // reload the unet and text guidance
             initAnUnexpectedJourney()
             initTheDesolationOfSmaug()
             initTheBattleOfTheFiveArmies()
-            initTextGuidance()
         }
     }
 }
-

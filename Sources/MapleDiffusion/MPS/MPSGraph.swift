@@ -15,8 +15,9 @@ extension MPSGraph {
     }
     
     func loadConstant(at folder: URL, name: String, shape: [NSNumber], fp32: Bool = false) -> MPSGraphTensor {
-        let numels = shape.map({$0.intValue}).reduce(1, *)
-        //    let fileUrl: URL = Bundle.main.url(forResource: "bins/" + name + (fp32 ? "_fp32" : ""), withExtension: ".bin")!
+        let numels = shape.reduce(into: 1, { accumulator, value in
+            accumulator *= value.intValue
+        })
         let fileUrl: URL = folder.appendingPathComponent(name + (fp32 ? "_fp32" : "")).appendingPathExtension("bin")
         let data: Data = try! Data(contentsOf: fileUrl, options: Data.ReadingOptions.alwaysMapped)
         let expectedCount = numels * (fp32 ? 4 : 2)
@@ -93,13 +94,6 @@ extension MPSGraph {
         return swish(makeGroupNorm(at: folder, xIn: xIn, name: name))
     }
     
-    func makeAuxUpsampler(at folder: URL, xIn: MPSGraphTensor) -> MPSGraphTensor {
-        var x = xIn
-        x = makeConv(at: folder, xIn: xIn, name: "aux_output_conv", outChannels: 3, khw: 1)
-        x = upsampleNearest(xIn: x, scaleFactor: 8)
-        return makeByteConverter(xIn: x)
-    }
-    
     func makeByteConverter(xIn: MPSGraphTensor) -> MPSGraphTensor {
         var x = xIn
         x = clamp(x, min: constant(0, shape: [1], dataType: MPSDataType.float16), max: constant(1.0, shape: [1], dataType: MPSDataType.float16), name: nil)
@@ -108,39 +102,6 @@ extension MPSGraph {
         x = cast(x, to: MPSDataType.uInt8, name: "cast to uint8 rgba")
         let alpha = constant(255, shape: [1, x.shape![1], x.shape![2], 1], dataType: MPSDataType.uInt8)
         return concatTensors([x, alpha], dimension: 3, name: nil)
-    }
-    
-    func makeTimeFeatures(at folder: URL, tIn: MPSGraphTensor) -> MPSGraphTensor {
-        var temb = cast(tIn, to: MPSDataType.float32, name: "temb")
-        var coeffs = loadConstant(at: folder, name: "temb_coefficients", shape: [160], fp32: true)
-        coeffs = cast(coeffs, to: MPSDataType.float32, name: "coeffs")
-        temb = multiplication(temb, coeffs, name: nil)
-        temb = concatTensors([cos(with: temb, name: nil), sin(with: temb, name: nil)], dimension: 0, name: nil)
-        temb = reshape(temb, shape: [1, 320], name: nil)
-        return cast(temb, to: MPSDataType.float16, name: "temb fp16")
-    }
-
-    func makeDiffusionStep(at folder: URL, xIn: MPSGraphTensor, etaUncondIn: MPSGraphTensor, etaCondIn: MPSGraphTensor, tIn: MPSGraphTensor, tPrevIn: MPSGraphTensor, guidanceScaleIn: MPSGraphTensor) -> MPSGraphTensor {
-        
-        // superconditioning
-        var deltaCond = multiplication(subtraction(etaCondIn, etaUncondIn, name: nil), guidanceScaleIn, name: nil)
-        deltaCond = tanh(with: deltaCond, name: nil) // NOTE: normal SD doesn't clamp here iirc
-        let eta = addition(etaUncondIn, deltaCond, name: nil)
-        
-        // scheduler conditioning
-        let alphasCumprod = loadConstant(at: folder, name: "alphas_cumprod", shape: [1000])
-        let alphaIn = gatherAlongAxis(0, updates: alphasCumprod, indices: tIn, name: nil)
-        let alphasCumprodPrev = concatTensors([constant(1, dataType: MPSDataType.float16), alphasCumprod], dimension: 0, name: nil)
-        let tPrevInOffset = reLU(with: addition(tPrevIn, constant(1, dataType: MPSDataType.int32), name: nil), name: nil)
-        let alphaPrevIn = gatherAlongAxis(0, updates: alphasCumprodPrev, indices: tPrevInOffset, name: nil)
-        
-        // scheduler step
-        let deltaX0 = multiplication(squareRootOfOneMinus(alphaIn), eta, name: nil)
-        let predX0Unscaled = subtraction(xIn, deltaX0, name: nil)
-        let predX0 = division(predX0Unscaled, squareRoot(with: alphaIn, name: nil), name: nil)
-        let dirX = multiplication(squareRootOfOneMinus(alphaPrevIn), eta, name: nil)
-        let xPrevBase = multiplication(squareRoot(with: alphaPrevIn, name: nil), predX0, name:nil)
-        return addition(xPrevBase, dirX, name: nil)
     }
     
     func stochasticEncode(at folder: URL, stepIn: MPSGraphTensor, timestepsIn: MPSGraphTensor, imageIn: MPSGraphTensor, noiseIn: MPSGraphTensor) -> MPSGraphTensor {
