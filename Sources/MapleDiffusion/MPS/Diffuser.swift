@@ -20,7 +20,7 @@ class Diffuser {
     private let out: MPSGraphTensor
     private let auxOut: MPSGraphTensor
     
-    init(synchronize: Bool, device: MPSGraphDevice, modelLocation: URL, shape: [NSNumber]) {
+    init(synchronize: Bool, modelLocation: URL, device: MPSGraphDevice, shape: [NSNumber]) {
         self.device = device
         graph = MPSGraph(synchronize: synchronize)
         xIn = graph.placeholder(shape: shape, dataType: MPSDataType.float16, name: nil)

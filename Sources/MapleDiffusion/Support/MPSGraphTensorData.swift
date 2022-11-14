@@ -1,5 +1,5 @@
 //
-//  MPSGraphTensorData+CGImage.swift
+//  MPSGraphTensorData.swift
 //  
 //
 //  Created by Guillermo Cique Fernández on 9/11/22.
@@ -49,3 +49,18 @@ extension MPSGraphTensorData {
  byteOrderInfo CGImageByteOrderInfo
  colorSpace Optional(<CGColorSpace 0x60000006cd80> (kCGColorSpaceICCBased; kCGColorSpaceModelRGB; sRGB IEC61966-2.1))
  */
+
+
+extension Int {
+    func tensorData(device: MPSGraphDevice) -> MPSGraphTensorData {
+        let data = [Int32(self)].withUnsafeBufferPointer { Data(buffer: $0) }
+        return MPSGraphTensorData(device: device, data: data, shape: [1], dataType: MPSDataType.int32)
+    }
+}
+
+extension Float {
+    func tensorData(device: MPSGraphDevice) -> MPSGraphTensorData {
+        let data = [Float32(self)].withUnsafeBufferPointer { Data(buffer: $0) }
+        return MPSGraphTensorData(device: device, data: data, shape: [1], dataType: MPSDataType.float32)
+    }
+}

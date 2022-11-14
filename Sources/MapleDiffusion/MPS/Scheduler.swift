@@ -27,7 +27,7 @@ class Scheduler {
     private let timestepIn: MPSGraphTensor
     private let tembOut: MPSGraphTensor
     
-    init(synchronize: Bool, device: MPSGraphDevice, modelLocation: URL, steps: Int) {
+    init(synchronize: Bool, modelLocation: URL, device: MPSGraphDevice, steps: Int) {
         self.device = device
         count = steps
         

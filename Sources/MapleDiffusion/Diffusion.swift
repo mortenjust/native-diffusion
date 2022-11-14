@@ -40,7 +40,7 @@ public class Diffusion : ObservableObject {
                 try await shared.prepModels(remoteURL: modelURL)
             }
         }
-        return await shared.generate(prompt: prompt)
+        return await shared.generate(input: SampleInput(prompt: prompt))
     }
     
     private var saveMemory = false
@@ -108,11 +108,11 @@ public class Diffusion : ObservableObject {
         let earlierProgress = combinedProgress
         
         /// 3. Initialize models on a background thread
-        try await initModels() { p in
-            combinedProgress = (p/combinedSteps) + earlierProgress
-            self.updateLoadingProgress(progress: combinedProgress, message: "Loading models")
-            progress?(combinedProgress)
-        }
+//        try await initModels() { p in
+//            combinedProgress = (p/combinedSteps) + earlierProgress
+//            self.updateLoadingProgress(progress: combinedProgress, message: "Loading models")
+//            progress?(combinedProgress)
+//        }
         
         /// 4. Done. Set published main status to true
         await MainActor.run {
@@ -131,51 +131,4 @@ public class Diffusion : ObservableObject {
             }
         }
     }
-    
-
-    
-    /// Async wrapper for initModels
-    private func initModels(progressCompletion: ProgressClosure?) async throws {
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            
-            Task.detached {
-                self.initModels { progress, stage in
-                    print("MD says", progress, stage)
-                    progressCompletion?(Double(progress))
-                    // this is where we are: This is being called twice, the "ready!"
-                    if progress == 1 { continuation.resume(returning: ()) }
-                }
-            }
-        }
-    }
-    
-    
-    /**
-     # Light wrappers
-     Just passing through to MD with the same interface
-     */
-    
-    ///  initialize SD models and send updates through a callback. Private because it assumes the global variable `global_modelFolder` is set..
-    ///  TODO: Use ModelFetcher here
-    private func initModels(completion: @escaping (Float, String)->()) {
-        mapleDiffusion.initModels { progress, stage in
-            
-            /// Workaround to start diffusion at launch rather than at first image. If it finishes before the user submits their first generation request, the generator will start producing intermediate images immediately
-//            if progress == 1 {
-//                Task.detached {
-//                    print("Warming up diffuser in background")
-//                    self.generate(prompt: "", negativePrompt: "", seed: 42, steps: 2, guidanceScale: 0) { _, progress, _ in
-//                        if progress == 1 {
-//                            print("Warmed up")
-//                        }
-//                    }
-//                }
-//            }
-            
-            completion(progress, stage)
-        }
-    }
-    
-
 }

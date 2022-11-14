@@ -13,7 +13,7 @@ class TextGuidance {
     private let tokenizer: BPETokenizer
     private let executable: MPSGraphExecutable
     
-    init(synchronize: Bool, device: MPSGraphDevice, modelLocation: URL) {
+    init(synchronize: Bool, modelLocation: URL, device: MPSGraphDevice) {
         self.device = device
         self.tokenizer = BPETokenizer(modelLocation: modelLocation)
         

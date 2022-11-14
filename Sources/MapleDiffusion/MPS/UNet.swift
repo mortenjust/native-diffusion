@@ -1,5 +1,5 @@
 //
-//  MPSGraph+UNet.swift
+//  UNet.swift
 //  
 //
 //  Created by Guillermo Cique Fernández on 9/11/22.
@@ -7,6 +7,208 @@
 
 import Foundation
 import MetalPerformanceShadersGraph
+
+class UNet {
+    let synchronize: Bool
+    let modelLocation: URL
+    let saveMemory: Bool
+    let device: MPSGraphDevice
+    
+    // MEM-HACK: split into subgraphs
+    private var unetAnUnexpectedJourneyExecutable: MPSGraphExecutable?
+    private var anUnexpectedJourneyShapes = [[NSNumber]]()
+    private var unetTheDesolationOfSmaugExecutable: MPSGraphExecutable?
+    private var theDesolationOfSmaugShapes = [[NSNumber]]()
+    private var theDesolationOfSmaugIndices = [MPSGraphTensor: Int]()
+    private var unetTheBattleOfTheFiveArmiesExecutable: MPSGraphExecutable?
+    private var theBattleOfTheFiveArmiesIndices = [MPSGraphTensor: Int]()
+    
+    init(synchronize: Bool, modelLocation: URL, saveMemory: Bool, device: MPSGraphDevice, shape: [NSNumber]) {
+        self.synchronize = synchronize
+        self.modelLocation = modelLocation
+        self.saveMemory = saveMemory
+        self.device = device
+        
+        loadAnUnexpectedJourney(shape: shape)
+        loadTheDesolationOfSmaug()
+        loadTheBattleOfTheFiveArmies()
+    }
+    
+    private func loadAnUnexpectedJourney(shape: [NSNumber]) {
+        let graph = MPSGraph(synchronize: synchronize)
+        let xIn = graph.placeholder(shape: shape, dataType: MPSDataType.float16, name: nil)
+        let condIn = graph.placeholder(shape: [saveMemory ? 1 : 2, 77, 768], dataType: MPSDataType.float16, name: nil)
+        let tembIn = graph.placeholder(shape: [1, 320], dataType: MPSDataType.float16, name: nil)
+        let unetOuts = graph.makeUNetAnUnexpectedJourney(
+            at: modelLocation,
+            xIn: xIn,
+            tembIn: tembIn,
+            condIn: condIn,
+            name: "model.diffusion_model",
+            saveMemory: saveMemory
+        )
+        let unetFeeds = [xIn, condIn, tembIn].reduce(into: [:], {$0[$1] = MPSGraphShapedType(shape: $1.shape!, dataType: $1.dataType)})
+        unetAnUnexpectedJourneyExecutable = graph.compile(
+            with: device,
+            feeds: unetFeeds,
+            targetTensors: unetOuts,
+            targetOperations: nil,
+            compilationDescriptor: nil
+        )
+        anUnexpectedJourneyShapes = unetOuts.map{$0.shape!}
+    }
+    
+    private func loadTheDesolationOfSmaug() {
+        let graph = MPSGraph(synchronize: synchronize)
+        let condIn = graph.placeholder(shape: [saveMemory ? 1 : 2, 77, 768], dataType: MPSDataType.float16, name: nil)
+        let placeholders = anUnexpectedJourneyShapes.map{graph.placeholder(shape: $0, dataType: MPSDataType.float16, name: nil)} + [condIn]
+        theDesolationOfSmaugIndices.removeAll()
+        for i in 0..<placeholders.count {
+            theDesolationOfSmaugIndices[placeholders[i]] = i
+        }
+        let feeds = placeholders.reduce(into: [:], {$0[$1] = MPSGraphShapedType(shape: $1.shape!, dataType: $1.dataType)})
+        let unetOuts = graph.makeUNetTheDesolationOfSmaug(at: modelLocation, savedInputsIn: placeholders, name: "model.diffusion_model", saveMemory: saveMemory)
+        unetTheDesolationOfSmaugExecutable = graph.compile(with: device, feeds: feeds, targetTensors: unetOuts, targetOperations: nil, compilationDescriptor: nil)
+        theDesolationOfSmaugShapes = unetOuts.map{$0.shape!}
+    }
+    
+    private func loadTheBattleOfTheFiveArmies() {
+        let graph = MPSGraph(synchronize: synchronize)
+        let condIn = graph.placeholder(shape: [saveMemory ? 1 : 2, 77, 768], dataType: MPSDataType.float16, name: nil)
+        let unetPlaceholders = theDesolationOfSmaugShapes.map{
+            graph.placeholder(shape: $0, dataType: MPSDataType.float16, name: nil)
+        } + [condIn]
+        theBattleOfTheFiveArmiesIndices.removeAll()
+        for i in 0..<unetPlaceholders.count {
+            theBattleOfTheFiveArmiesIndices[unetPlaceholders[i]] = i
+        }
+        let feeds = unetPlaceholders.reduce(into: [:], {
+            $0[$1] = MPSGraphShapedType(shape: $1.shape!, dataType: $1.dataType)}
+        )
+        let unetOut = graph.makeUNetTheBattleOfTheFiveArmies(
+            at: modelLocation,
+            savedInputsIn: unetPlaceholders,
+            name: "model.diffusion_model",
+            saveMemory: saveMemory
+        )
+        unetTheBattleOfTheFiveArmiesExecutable = graph.compile(
+            with: device,
+            feeds: feeds,
+            targetTensors: [unetOut],
+            targetOperations: nil,
+            compilationDescriptor: nil
+        )
+    }
+    
+    private func reorderAnUnexpectedJourney(x: [MPSGraphTensorData]) -> [MPSGraphTensorData] {
+        var out = [MPSGraphTensorData]()
+        for r in unetAnUnexpectedJourneyExecutable!.feedTensors! {
+            for i in x {
+                if (i.shape == r.shape) {
+                    out.append(i)
+                }
+            }
+        }
+        return out
+    }
+    
+    private func reorderTheDesolationOfSmaug(x: [MPSGraphTensorData]) -> [MPSGraphTensorData] {
+        var out = [MPSGraphTensorData]()
+        for r in unetTheDesolationOfSmaugExecutable!.feedTensors! {
+            out.append(x[theDesolationOfSmaugIndices[r]!])
+        }
+        return out
+    }
+    
+    private func reorderTheBattleOfTheFiveArmies(x: [MPSGraphTensorData]) -> [MPSGraphTensorData] {
+        var out = [MPSGraphTensorData]()
+        for r in unetTheBattleOfTheFiveArmiesExecutable!.feedTensors! {
+            out.append(x[theBattleOfTheFiveArmiesIndices[r]!])
+        }
+        return out
+    }
+    
+    private func runUNet(
+        with queue: MTLCommandQueue,
+        latent: MPSGraphTensorData,
+        guidance: MPSGraphTensorData,
+        temb: MPSGraphTensorData
+    ) -> MPSGraphTensorData {
+        var x = unetAnUnexpectedJourneyExecutable!.run(
+            with: queue,
+            inputs: reorderAnUnexpectedJourney(x: [latent, guidance, temb]),
+            results: nil,
+            executionDescriptor: nil
+        )
+        x = unetTheDesolationOfSmaugExecutable!.run(
+            with: queue,
+            inputs: reorderTheDesolationOfSmaug(x: x + [guidance]),
+            results: nil,
+            executionDescriptor: nil
+        )
+        return unetTheBattleOfTheFiveArmiesExecutable!.run(
+            with: queue,
+            inputs: reorderTheBattleOfTheFiveArmies(x: x + [guidance]),
+            results: nil,
+            executionDescriptor: nil
+        )[0]
+    }
+    
+    private func runBatchedUNet(
+        with queue: MTLCommandQueue,
+        latent: MPSGraphTensorData,
+        baseGuidance: MPSGraphTensorData,
+        textGuidance: MPSGraphTensorData,
+        temb: MPSGraphTensorData
+    ) -> (MPSGraphTensorData, MPSGraphTensorData) {
+        // concat
+        var graph = MPSGraph(synchronize: synchronize)
+        let bg = graph.placeholder(shape: baseGuidance.shape, dataType: MPSDataType.float16, name: nil)
+        let tg = graph.placeholder(shape: textGuidance.shape, dataType: MPSDataType.float16, name: nil)
+        let concatGuidance = graph.concatTensors([bg, tg], dimension: 0, name: nil)
+        let concatGuidanceData = graph.run(
+            with: queue,
+            feeds: [
+                bg : baseGuidance,
+                tg: textGuidance
+            ],
+            targetTensors: [concatGuidance], targetOperations
+            : nil
+        )[concatGuidance]!
+        // run
+        let concatEtaData = runUNet(with: queue, latent: latent, guidance: concatGuidanceData, temb: temb)
+        // split
+        graph = MPSGraph(synchronize: synchronize)
+        let etas = graph.placeholder(shape: concatEtaData.shape, dataType: concatEtaData.dataType, name: nil)
+        let eta0 = graph.sliceTensor(etas, dimension: 0, start: 0, length: 1, name: nil)
+        let eta1 = graph.sliceTensor(etas, dimension: 0, start: 1, length: 1, name: nil)
+        let etaRes = graph.run(
+            with: queue,
+            feeds: [etas: concatEtaData],
+            targetTensors: [eta0, eta1],
+            targetOperations: nil
+        )
+        return (etaRes[eta0]!, etaRes[eta1]!)
+    }
+    
+    
+    func run(
+        with queue: MTLCommandQueue,
+        latent: MPSGraphTensorData,
+        baseGuidance: MPSGraphTensorData,
+        textGuidance: MPSGraphTensorData,
+        temb: MPSGraphTensorData
+    ) -> (MPSGraphTensorData, MPSGraphTensorData) {
+        if (saveMemory) {
+            // MEM-HACK: un/neg-conditional and text-conditional are run in two separate passes (not batched) to save memory
+            let etaUncond = runUNet(with: queue, latent: latent, guidance: baseGuidance, temb: temb)
+            let etaCond = runUNet(with: queue, latent: latent, guidance: textGuidance, temb: temb)
+            return (etaUncond, etaCond)
+        } else {
+            return runBatchedUNet(with: queue, latent: latent, baseGuidance: baseGuidance, textGuidance: textGuidance, temb: temb)
+        }
+    }
+}
 
 extension MPSGraph {
     func makeTimeEmbed(at folder: URL, xIn: MPSGraphTensor, name: String) -> MPSGraphTensor {
