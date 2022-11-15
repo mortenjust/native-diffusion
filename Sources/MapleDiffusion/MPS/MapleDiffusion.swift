@@ -212,7 +212,13 @@ class MapleDiffusion {
         var latent = initLatent(input: input, scheduler: scheduler)
         
         // 3. Diffusion
-        completion(nil, 0.1, "Starting diffusion...")
+        let startImage: CGImage?
+        if saveMemory {
+            startImage = input.initImage
+        } else {
+            startImage = runDecoder(latent: latent)
+        }
+        completion(startImage, 0.1, "Starting diffusion...")
         sample(
             latent: &latent,
             input: input,
