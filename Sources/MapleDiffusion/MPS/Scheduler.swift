@@ -10,7 +10,7 @@ import MetalPerformanceShadersGraph
 
 class Scheduler {
     let count: Int
-    let timesteps: [Int]
+    private let timesteps: [Int]
     let timestepSize: Int
     var timestepsData: MPSGraphTensorData {
         let data = timesteps.map { Int32($0) }.withUnsafeBufferPointer { Data(buffer: $0) }
@@ -36,6 +36,12 @@ class Scheduler {
         graph = MPSGraph(synchronize: synchronize)
         timestepIn = graph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
         tembOut = graph.makeTimeFeatures(at: modelLocation, tIn: timestepIn)
+    }
+    
+    func timesteps(strength: Float?) -> [Int] {
+        guard let strength else { return timesteps.reversed() }
+        let startStep = Int(Float(count) * strength)
+        return timesteps[0..<startStep].reversed()
     }
     
     func run(with queue: MTLCommandQueue, timestep: Int) -> MPSGraphTensorData {

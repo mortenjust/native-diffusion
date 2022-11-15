@@ -77,15 +77,20 @@ class MapleDiffusion {
         )
     }()
     
-    // unet
-    // MEM-HACK: split into subgraphs
-    var unetAnUnexpectedJourneyExecutable: MPSGraphExecutable?
-    var anUnexpectedJourneyShapes = [[NSNumber]]()
-    var unetTheDesolationOfSmaugExecutable: MPSGraphExecutable?
-    var theDesolationOfSmaugShapes = [[NSNumber]]()
-    var theDesolationOfSmaugIndices = [MPSGraphTensor: Int]()
-    var unetTheBattleOfTheFiveArmiesExecutable: MPSGraphExecutable?
-    var theBattleOfTheFiveArmiesIndices = [MPSGraphTensor: Int]()
+    private var _decoder: Decoder?
+    var decoder: Decoder {
+        if let _decoder {
+            return _decoder
+        }
+        let decoder = Decoder(
+            synchronize: synchronize,
+            modelLocation: modelLocation,
+            device: graphDevice,
+            shape: [1, height, width, 4]
+        )
+        _decoder = decoder
+        return decoder
+    }
     
     var width: NSNumber = 64
     var height: NSNumber = 64
@@ -99,12 +104,6 @@ class MapleDiffusion {
         synchronize = !device.hasUnifiedMemory
     }
     
-    private func randomLatent(seed: Int) -> MPSGraphTensorData {
-        let graph = MPSGraph(synchronize: synchronize)
-        let out = graph.randomTensor(withShape: [1, height, width, 4], descriptor: MPSGraphRandomOpDescriptor(distribution: .normal, dataType: .float16)!, seed: seed, name: nil)
-        return graph.run(with: commandQueue, feeds: [:], targetTensors: [out], targetOperations: nil)[out]!
-    }
-    
     private func runTextGuidance(prompt: String, negativePrompt: String) -> (MPSGraphTensorData, MPSGraphTensorData) {
         let guidance = textGuidance.run(with: commandQueue, prompt: prompt, negativePrompt: negativePrompt)
         if saveMemory {
@@ -114,73 +113,44 @@ class MapleDiffusion {
         return guidance
     }
     
-    private func loadDecoderAndGetFinalImage(xIn: MPSGraphTensorData) -> MPSGraphTensorData {
-        // MEM-HACK: decoder is loaded from disc and deallocated to save memory (at cost of latency)
-        let x = xIn
-        let decoderGraph = MPSGraph(synchronize: synchronize)
-        let decoderIn = decoderGraph.placeholder(shape: x.shape, dataType: MPSDataType.float16, name: nil)
-        let decoderOut = decoderGraph.makeDecoder(at: modelLocation, xIn: decoderIn)
-        return decoderGraph.run(with: commandQueue, feeds: [decoderIn: x], targetTensors: [decoderOut], targetOperations: nil)[decoderOut]!
-    }
-    
-    private func initLatent(image: CGImage, tEnc: Int, timesteps: MPSGraphTensorData, seed: Int) -> MPSGraphTensorData {
-        // MEM-HACK: encoder is loaded from disc and deallocated to save memory (at cost of latency)
-        
-        let imageData = MPSGraphTensorData(device: graphDevice, cgImage: image)
-        
-        let graph = MPSGraph(synchronize: synchronize)
-        let encoderIn = graph.placeholder(shape: imageData.shape, dataType: MPSDataType.uInt8, name: nil)
-        let encoderOut = graph.makeEncoder(at: modelLocation, xIn: encoderIn)
-        let gaussianNoise = graph.randomTensor(withShape: [1, height, width, 4], descriptor: MPSGraphRandomOpDescriptor(distribution: .normal, dataType: .float16)!, seed: seed, name: nil)
-        let gaussianOut = graph.diagonalGaussianDistribution(encoderOut, noise: gaussianNoise)
-        let scaled = graph.multiplication(gaussianOut, graph.constant(0.18215, dataType: MPSDataType.float16), name: "rescale")
-        
-        let stepData = tEnc.tensorData(device: graphDevice)
-        let stepIn = graph.placeholder(shape: [1], dataType: MPSDataType.int32, name: nil)
-        let timestepsIn = graph.placeholder(shape: timesteps.shape, dataType: MPSDataType.int32, name: nil)
-        
-        let noise = graph.randomTensor(withShape: [1, height, width, 4], descriptor: MPSGraphRandomOpDescriptor(distribution: .normal, dataType: .float16)!, seed: seed, name: nil)
-        let stochasticEncode = graph.stochasticEncode(at: modelLocation, stepIn: stepIn, timestepsIn: timestepsIn, imageIn: scaled, noiseIn: noise)
-        
-        return graph.run(
-            with: commandQueue,
-            feeds: [
-                encoderIn: imageData,
-                stepIn: stepData,
-                timestepsIn: timesteps
-            ], targetTensors: [
-                gaussianNoise, noise, encoderOut, gaussianOut, scaled, stochasticEncode
-            ], targetOperations: nil
-        )[stochasticEncode]!
-    }
-    
-    private func generateLatent(
-        input: SampleInput,
-        completion: @escaping (CGImage?, Float, String)->()
-    ) -> MPSGraphTensorData {
-        completion(input.initImage, 0, "Tokenizing...")
-        
-        // 1. String -> Embedding
-        let guidanceScaleData = input.guidanceScale.tensorData(device: graphDevice)
-        
-        let (baseGuidance, textGuidance) = runTextGuidance(prompt: input.prompt, negativePrompt: input.negativePrompt)
-        completion(input.initImage, 0.5 * 1 / Float(input.steps), "Generating noise...")
-        
-        // 2. Noise generation
-        let scheduler = Scheduler(synchronize: synchronize, modelLocation: modelLocation, device: graphDevice, steps: input.steps)
-        var startStep: Int
-        var latent: MPSGraphTensorData
+    private func initLatent(input: SampleInput, scheduler: Scheduler) -> MPSGraphTensorData {
         if let image = input.initImage, let strength = input.strength {
-            startStep = Int(Float(input.steps) * strength)
-            latent = initLatent(image: image, tEnc: startStep, timesteps: scheduler.timestepsData, seed: input.seed)
+            let imageData = MPSGraphTensorData(device: graphDevice, cgImage: image)
+            let timestepsData = scheduler.timestepsData
+            let startStep = Int(Float(input.steps) * strength)
+            let encoder = Encoder(
+                synchronize: synchronize,
+                modelLocation: modelLocation,
+                device: graphDevice,
+                inputShape: imageData.shape,
+                outputShape: [1, height, width, 4],
+                timestepsShape: timestepsData.shape,
+                seed: input.seed
+            )
+            return encoder.run(with: commandQueue, image: imageData, step: startStep, timesteps: timestepsData)
         } else {
-            startStep = input.steps
-            latent = randomLatent(seed: input.seed)
+            let graph = MPSGraph(synchronize: synchronize)
+            let out = graph.randomTensor(
+                withShape: [1, height, width, 4],
+                descriptor: MPSGraphRandomOpDescriptor(distribution: .normal, dataType: .float16)!,
+                seed: input.seed,
+                name: nil
+            )
+            return graph.run(with: commandQueue, feeds: [:], targetTensors: [out], targetOperations: nil)[out]!
         }
-        
-        completion(nil, 0.75 * 1 / Float(input.steps), "Starting diffusion...")
-        // 3. Diffusion
-        for (index, timestep) in scheduler.timesteps[0..<startStep].enumerated().reversed() {
+    }
+    
+    private func sample(
+        latent: inout MPSGraphTensorData,
+        input: SampleInput,
+        baseGuidance: MPSGraphTensorData,
+        textGuidance: MPSGraphTensorData,
+        scheduler: Scheduler,
+        completion: @escaping (CGImage?, Float, String) -> ()
+    ) {
+        let guidanceScaleData = input.guidanceScale.tensorData(device: graphDevice)
+        let actualTimesteps = scheduler.timesteps(strength: input.strength)
+        for (index, timestep) in actualTimesteps.enumerated() {
             let tick = CFAbsoluteTimeGetCurrent()
             
             let temb = scheduler.run(with: commandQueue, timestep: timestep)
@@ -205,38 +175,58 @@ class MapleDiffusion {
             // update ui
             let tock = CFAbsoluteTimeGetCurrent()
             let stepRuntime = String(format:"%.2fs", tock - tick)
-            let progressDesc = index == 0 ? "Decoding..." : "Step \(scheduler.timesteps.count - index) / \(scheduler.timesteps.count) (\(stepRuntime) / step)"
+            let progressDesc = index == 0 ? "Decoding..." : "Step \(index) / \(actualTimesteps.count) (\(stepRuntime) / step)"
             let outImage = auxOut?.cgImage
-            completion(outImage, Float(scheduler.timesteps.count - index) / Float(scheduler.timesteps.count), progressDesc)
+            let progress = 0.1 + (Float(index) / Float(actualTimesteps.count)) * 0.8
+            completion(outImage, progress, progressDesc)
         }
         
         if saveMemory {
             // MEM-HACK: unload the unet to fit the decoder
             _uNet = nil
         }
-        
-        return latent
+    }
+    
+    private func runDecoder(latent: MPSGraphTensorData) -> CGImage? {
+        let decodedLatent = decoder.run(with: commandQueue, xIn: latent)
+        if saveMemory {
+            // MEM-HACK unload the decoder
+            _decoder = nil
+        }
+        return decodedLatent.cgImage
     }
     
     public func generate(
         input: SampleInput,
-        completion: @escaping (CGImage?, Float, String)->()
+        completion: @escaping (CGImage?, Float, String) -> ()
     ) {
-        let tick = CFAbsoluteTimeGetCurrent()
-        let latent = generateLatent(input: input, completion: completion)
+        let mainTick = CFAbsoluteTimeGetCurrent()
         
-        if (saveMemory) {
-            // MEM-HACK: unload the unet to fit the decoder
-            unetAnUnexpectedJourneyExecutable = nil
-            unetTheDesolationOfSmaugExecutable = nil
-            unetTheBattleOfTheFiveArmiesExecutable = nil
-        }
+        // 1. String -> Embedding
+        completion(input.initImage, 0, "Tokenizing...")
+        let (baseGuidance, textGuidance) = runTextGuidance(prompt: input.prompt, negativePrompt: input.negativePrompt)
         
-        // 5. Decoder
-        let decoderRes = loadDecoderAndGetFinalImage(xIn: latent)
-        completion(decoderRes.cgImage, 1.0, "Cooling down...")
-        let tock = CFAbsoluteTimeGetCurrent()
-        let runtime = String(format:"%.2fs", tock - tick)
+        // 2. Noise generation
+        completion(input.initImage, 0.05, "Generating noise...")
+        let scheduler = Scheduler(synchronize: synchronize, modelLocation: modelLocation, device: graphDevice, steps: input.steps)
+        var latent = initLatent(input: input, scheduler: scheduler)
+        
+        // 3. Diffusion
+        completion(nil, 0.1, "Starting diffusion...")
+        sample(
+            latent: &latent,
+            input: input,
+            baseGuidance: baseGuidance,
+            textGuidance: textGuidance,
+            scheduler: scheduler,
+            completion: completion
+        )
+        
+        // 4. Decoder
+        let finalImage = runDecoder(latent: latent)
+        completion(finalImage, 1.0, "Cooling down...")
+        let mainTock = CFAbsoluteTimeGetCurrent()
+        let runtime = String(format:"%.2fs", mainTock - mainTick)
         print("Time", runtime)
     }
 }
