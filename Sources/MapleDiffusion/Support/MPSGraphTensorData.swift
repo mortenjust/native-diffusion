@@ -29,16 +29,8 @@ extension MPSGraphTensorData {
     }
     
     public convenience init(device: MPSGraphDevice, cgImage: CGImage) {
-        let shape: [NSNumber] = [NSNumber(value: cgImage.height), NSNumber(value: cgImage.width), 3]
-        let nsData = cgImage.dataProvider!.data! as NSData
-        print("bitsPerPixel", cgImage.bitsPerPixel)
-        print("bytesPerRow", cgImage.bytesPerRow)
-        print("byteOrderInfo", cgImage.byteOrderInfo.rawValue)
-        print("colorSpace", cgImage.colorSpace)
-        // Remove alpha channel
-        let data = Data(stride(from: 0, to: nsData.count, by: 4).flatMap { i -> [UInt8] in
-            [nsData[i], nsData[i+1], nsData[i+2]]
-        })
+        let shape: [NSNumber] = [NSNumber(value: cgImage.height), NSNumber(value: cgImage.width), 4]
+        let data = cgImage.dataProvider!.data! as Data
         self.init(device: device, data: data, shape: shape, dataType: .uInt8)
     }
 }

@@ -56,10 +56,12 @@ extension MPSGraph {
     
     func makeEncoder(at folder: URL, xIn: MPSGraphTensor) -> MPSGraphTensor {
         var x = xIn
-        // TODO: Convert image
-        x = cast(xIn, to: .float16, name: nil)
+        // Split into RBGA
+        let xParts = split(x, numSplits: 4, axis: 2, name: nil)
+        // Drop alpha channel
+        x = concatTensors(xParts.dropLast(), dimension: 2, name: nil)
+        x = cast(x, to: .float16, name: nil)
         x = division(x, constant(255.0, shape: [1], dataType: .float16), name: nil)
-        x = round(with: x, name: nil)
         x = expandDims(x, axis: 0, name: nil)
         x = multiplication(x, constant(2.0, shape: [1], dataType: .float16), name: nil)
         x = subtraction(x, constant(1.0, shape: [1], dataType: .float16), name: nil)
