@@ -105,7 +105,7 @@ public class Diffusion : ObservableObject {
         /// 2. instantiate MD, which has light side effects
         self.mapleDiffusion = MapleDiffusion(modelLocation: modelLocation, saveMemoryButBeSlower: saveMemory)
         
-        let earlierProgress = combinedProgress
+//        let earlierProgress = combinedProgress
         
         /// 3. Initialize models on a background thread
 //        try await initModels() { p in

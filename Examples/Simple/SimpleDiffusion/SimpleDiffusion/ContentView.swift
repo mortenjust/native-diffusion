@@ -35,7 +35,11 @@ struct ContentView: View {
         .task {
             // 2
             let path = URL(string: "http://localhost:8080/Diffusion.zip")!
-            try! await sd.prepModels(remoteURL: path)
+            do {
+                try await sd.prepModels(remoteURL: path)
+            } catch {
+                assertionFailure("Hi, developer. You most likely don't have a local webserver running that serves the zip file with the transformed model files. ")
+            }
         }
         
         // 4
