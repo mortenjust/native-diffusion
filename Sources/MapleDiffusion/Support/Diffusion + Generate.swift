@@ -11,7 +11,6 @@ import CoreGraphics
 
 public extension Diffusion {
     
-    
     /// Generate an image asynchronously. Optional callback with progress and intermediate image. Run inside a Task.detached to run in background.
     /// ```
     ///   // without progress reporting
@@ -20,13 +19,10 @@ public extension Diffusion {
     ///   // with progress
     ///    let image = await diffusion.generate("astronaut in the ocean") { progress in
     ///           print("progress: \(progress.progress)") }
-     func generate(prompt: String,
-                         negativePrompt: String = "",
-                         seed: Int = Int.random(in: 0...Int.max),
-                         steps:Int = 20,
-                         guidanceScale:Float = 7.5,
-                         progress: ((GenResult) -> Void)? = nil,
-                   remoteUrl: String? = nil
+     func generate(
+        input: SampleInput,
+        progress: ((GenResult) -> Void)? = nil,
+        remoteUrl: String? = nil
     ) async -> CGImage? {
          
          var combinedSteps : Double = 1
@@ -45,8 +41,8 @@ public extension Diffusion {
          
          // generate image
         return await withCheckedContinuation { continuation in
-            print("async gen: generating", prompt)
-            self.generate(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: steps, guidanceScale: guidanceScale) { (image, progressFloat, stage) in
+            print("async gen: generating", input.prompt)
+            self.generate(input: input) { (image, progressFloat, stage) in
                 let genResult = GenResult(image: image, progress: Double(progressFloat), stage: stage)
                 progress?(genResult)
                 
@@ -72,14 +68,13 @@ public extension Diffusion {
     ///         print("progress: \(result.progress)") // result also contains the intermediate image
     ///      }.store(in: ...)
     ///
-     func generate(prompt: String, negativePrompt: String = "", seed: Int = Int.random(in: 0...Int.max), steps:Int = 20, guidanceScale:Float = 7.5) -> AnyPublisher<GenResult,Never> {
-        
+     func generate(input: SampleInput) -> AnyPublisher<GenResult,Never> {
         let publisher = PassthroughSubject<GenResult, Never>()
         
         Task.detached(priority: .userInitiated) { // TODO: Test other priorities and consider making it an optional argument
-            self.generate(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: steps, guidanceScale: guidanceScale) { (cgImage, progress, stage) in
+            self.generate(input: input) { (cgImage, progress, stage) in
                 Task {
-                    print("RAW progress", progress)
+//                    print("RAW progress", progress)
                     await MainActor.run {
                         let result = GenResult(image: cgImage, progress: Double(progress), stage: stage)
                         publisher.send(result)
@@ -93,22 +88,14 @@ public extension Diffusion {
         
     }
     
-    
-    /**
-     
-     Main
-     
-     */
-    
     /// Generate and image with a callback. Run in a background thread.
     ///
-    func generate(prompt: String, negativePrompt: String = "", seed: Int = Int.random(in: 0...Int.max), steps:Int = 20, guidanceScale:Float = 7.5,
-                  completion: @escaping (CGImage?, Float, String)->()) {
-        
+    func generate(
+        input: SampleInput,
+        completion: @escaping (CGImage?, Float, String)->()
+    ) {
         // all the other `generate` functions call this one
-        
-        mapleDiffusion.generate(prompt: prompt, negativePrompt: negativePrompt, seed: seed, steps: steps, guidanceScale: guidanceScale) { cgImage, progress, stage in
-            
+        mapleDiffusion.generate(input: input) { cgImage, progress, stage in
             // penultimate step is also marked progress 1 in MD currently, working around it
             var realProgress = progress
             if progress == 1 && stage.contains("Decoding") {
@@ -116,9 +103,6 @@ public extension Diffusion {
             }
             
             completion(cgImage, realProgress, stage)
-            
         }
     }
-    
-    
 }
