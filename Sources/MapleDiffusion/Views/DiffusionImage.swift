@@ -12,16 +12,21 @@ import UniformTypeIdentifiers
 public struct DiffusionImage : View {
     @Binding var image : CGImage?
     @Binding var progress : Double
+    var inputImage : Binding<CGImage?>?
+    @State var isTargeted = false
+    
     let label : String
     let draggable : Bool
     
     public init(image: Binding<CGImage?>,
+                inputImage: Binding<CGImage?>? = nil,
                 progress: Binding<Double>,
                 label: String = "Generated Image",
                 draggable: Bool = true)
- {
+    {
         self._image = image
         self._progress = progress
+        self.inputImage = inputImage
         self.label = label
         self.draggable = draggable
     }
@@ -32,40 +37,28 @@ public struct DiffusionImage : View {
     }
     
     public var body: some View {
-        if let image {
-            Image(image, scale: 1, label: Text(label))
-                .resizable()
-                .aspectRatio(contentMode: .fit)            
-                .blur(radius: (1 - sqrt(progress)) * 600 )
-                .animation(.default, value: progress)
-                .clipShape(Rectangle())
-            #if os(macOS)
-                .draggable(enabled: enableDrag, image: image)
-            #endif
-        }
-    }
-}
-
+        VStack {
+            if let image {
+                
+                Image(image, scale: 1, label: Text(label))
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+//                    .blur(radius: inputImage == nil ? ((1 - sqrt(progress)) * 600) : 0 )
+                    .animation(.default, value: progress)
+                    .clipShape(Rectangle())
 #if os(macOS)
-/// Allow safe and optional item dragging
-struct FinderDraggable : ViewModifier {
-    let image: CGImage
-    let enabled: Bool
-    
-    func body(content: Content) -> some View {
-        if enabled, let provider = image.itemProvider() {
-            content.onDrag {
-                provider
+                    .draggable(enabled: enableDrag, image: image)
+#endif
             }
-        } else {
-           content
         }
+#if os(macOS)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .imageDroppable() { image in
+            print("di got image", image, "now setting to image")
+            self.inputImage?.wrappedValue = image.scale(targetSize: CGSize(width: 512, height: 512))
+            self.image = inputImage?.wrappedValue
+        }
+#endif
     }
 }
 
-extension View {
-    public func draggable(enabled: Bool, image: CGImage) -> some View {
-        self.modifier(FinderDraggable(image: image, enabled: enabled))
-    }
-}
-#endif

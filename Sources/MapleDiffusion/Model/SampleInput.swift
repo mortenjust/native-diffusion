@@ -21,7 +21,7 @@ public struct SampleInput {
         prompt: String,
         negativePrompt: String = "",
         seed: Int = Int.random(in: 0...Int.max),
-        steps: Int = 50,
+        steps: Int = 20,
         guidanceScale: Float = 7.5
     ) {
         self.prompt = prompt
@@ -39,7 +39,7 @@ public struct SampleInput {
         initImage: CGImage,
         strength: Float = 0.75,
         seed: Int = Int.random(in: 0...Int.max),
-        steps: Int = 50,
+        steps: Int = 20,
         guidanceScale: Float = 5.0
     ) {
         self.prompt = prompt

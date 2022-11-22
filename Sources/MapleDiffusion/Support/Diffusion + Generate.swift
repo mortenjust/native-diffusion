@@ -16,8 +16,6 @@ import CoreGraphics
 
 public extension Diffusion {
     
-
-    
     
     /// Generate an image async. Optional callback with progress and intermediate image.
      func generate(
