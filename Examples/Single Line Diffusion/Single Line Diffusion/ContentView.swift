@@ -13,15 +13,11 @@ struct ContentView: View {
 
     var body: some View {
         VStack {
-            if let image { Image(image, scale: 1, label: Text("Generated")) } else { Text("Loading")}
+            if let image { Image(image, scale: 1, label: Text("Generated")) } else { Text("Loading. See console.")}
         }
         .onAppear {
             Task.detached {
                 for _ in 0...10 {
-                    
-                    // Local, offline Stable Diffusion in Swift. No Python.
-                    // Download + init + generate = 1 line of code:
-                    
                     image = try? await Diffusion.generate(localOrRemote: modelUrl, prompt: "cat astronaut")
                 }
             }

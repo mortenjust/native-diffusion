@@ -25,7 +25,6 @@ if not vocab_dest.exists():
 
 # model weights
 for k, v in ckpt["state_dict"].items():
-    if "first_stage_model.encoder" in k: continue
     if not hasattr(v, "numpy"): continue
     v.numpy().astype('float16').tofile(outpath / (k + ".bin"))
     print("exporting state_dict", k, end="\r")
