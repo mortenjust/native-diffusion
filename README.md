@@ -2,7 +2,7 @@
 
 Maple Diffusion runs Stable Diffusion models **locally** on macOS / iOS devices, in Swift, using the MPSGraph framework (not Python).
 
-This is the Swift Package Manager wrapper of [Maple Diffusion](https://github.com/madebyollin/maple-diffusion). It also adds a few Combine publishers and async/await versions of some functions and supports downloading weights from any local or remote URL, including the app bundle itself. 
+This is the Swift Package Manager wrapper of [Maple Diffusion](https://github.com/madebyollin/maple-diffusion). It adds image-to-image, Swift Package Manager package, and convenient ways to use the code, like Combine publishers and async/await versions of some functions. It also supports downloading weights from any local or remote URL, including the app bundle itself. 
 
 Thanks
 * [@madebyollin](https://github.com/madebyollin/maple-diffusion) for writing the Metal Performance Shader Graph implementation of the Stable Diffusion pipeline
