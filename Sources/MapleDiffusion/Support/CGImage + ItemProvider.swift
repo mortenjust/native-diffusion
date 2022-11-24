@@ -16,19 +16,23 @@ import UniformTypeIdentifiers
 
 
 extension CGImage {
-    
     func itemProvider(filename: String? = nil) -> NSItemProvider? {
         let rep = NSBitmapImageRep(cgImage: self)
-        let data = rep.representation(using: .png, properties: [:])
+        guard let data = rep.representation(using: .png, properties: [:]) else { return nil }
         
-        let saveTo = filename ?? "Generated Image \(UUID().uuidString.prefix(4))"
+        let filename = filename ?? "Generated Image \(UUID().uuidString.prefix(4))"
         
-        let tempUrl =  FileManager.default.temporaryDirectory.appendingPathComponent(saveTo).appendingPathExtension("png")
-        try? data?.write(to:tempUrl)
-        
-        let item = NSItemProvider(item: tempUrl as NSSecureCoding, typeIdentifier: UTType.url.identifier)
-
-        return item
+        let tempUrl = FileManager.default.temporaryDirectory.appendingPathComponent(filename).appendingPathExtension("png")
+        do {
+            try data.write(to: tempUrl)
+            
+            let item = NSItemProvider(item: tempUrl as NSSecureCoding, typeIdentifier: UTType.fileURL.identifier)
+            item.suggestedName = "\(filename).png"
+            
+            return item
+        } catch {
+            return nil
+        }
     }
 }
 #endif
