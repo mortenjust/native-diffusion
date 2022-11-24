@@ -5,8 +5,8 @@ Maple Diffusion runs Stable Diffusion models **locally** on macOS / iOS devices,
 This is the Swift Package Manager wrapper of [Maple Diffusion](https://github.com/madebyollin/maple-diffusion). It also adds a few Combine publishers and async/await versions of some functions and supports downloading weights from any local or remote URL, including the app bundle itself. 
 
 Thanks
-    * [@madebyollin](https://github.com/madebyollin/maple-diffusion) for writing the Metal Performance Shader Graph implementation of the Stable Diffusion pipeline
-    * [@GuiyeC](https://github.com/GuiyeC) for writing the image-to-image implementation
+* [@madebyollin](https://github.com/madebyollin/maple-diffusion) for writing the Metal Performance Shader Graph implementation of the Stable Diffusion pipeline
+* [@GuiyeC](https://github.com/GuiyeC) for writing the image-to-image implementation
 
 # Usage
 ## One-line diffusion
@@ -78,10 +78,10 @@ See `examples/SimpleDiffusion` for a working example.
 
 ## `DiffusionImage`
 An optional SwiftUI view that is specialized for diffusion: 
-    - Receives drag and drop of an image from e.g. Finder and sends it back to you via a binding (macOS)
-    - Automatically resizes the image to 512x512 (macOS)
-    - Lets users drag the image to Finder or other apps (macOS)
-    - Blurs the internmediate image while generating (macOS and iOS)
+- Receives drag and drop of an image from e.g. Finder and sends it back to you via a binding (macOS)
+- Automatically resizes the image to 512x512 (macOS)
+- Lets users drag the image to Finder or other apps (macOS)
+- Blurs the internmediate image while generating (macOS and iOS)
 
 # Install
 Add `https://github.com/mortenjust/maple-diffusion` in the ["Swift Package Manager" tab in Xcode](https://developer.apple.com/documentation/xcode/adding_package_dependencies_to_your_app)
