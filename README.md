@@ -72,6 +72,13 @@ Here's what it does
 
 See `examples/SimpleDiffusion` for a working example. 
 
+## `DiffusionImage`
+An optional SwiftUI view that is specialized for diffusion: 
+    - Receives drag and drop of an image from e.g. Finder and sends it back to you via a binding (macOS)
+    - Automatically resizes the image to 512x512 (macOS)
+    - Lets users drag the image to Finder or other apps (macOS)
+    - Blurs the internmediate image while generating (macOS and iOS)
+
 # Install
 Add `https://github.com/mortenjust/maple-diffusion` in the ["Swift Package Manager" tab in Xcode](https://developer.apple.com/documentation/xcode/adding_package_dependencies_to_your_app)
 
@@ -111,12 +118,20 @@ The script will create a new folder called `bins`. We'll get back to what to do 
 ## Can I use a Dreambooth model?
 Yes. Just copy the `alpha*` files from the standard conversion. This repo will include these files in the future. See [this issue](https://github.com/madebyollin/maple-diffusion/issues/22).
 
+## It crashes
+You may need to regenerate the model files with the python script in the repo. This happens if you converted your ckpt model file before we added image2image.
+
 ## Can I contribute? What's next?
 Yes! Some ideas
 
-- [ ] Tighten up code quality overall. Most is proof of concept. 
-- [ ] Add image-to-image 
 - [ ] Add in-painting and out-painting
+- [ ] Generate other sizes and aspects than 512x512
+- [ ] Upscaling
+- [ ] Dreambooth training on-device
+- [x] Tighten up code quality overall. Most is proof of concept. 
+- [x] Add image-to-image 
+
+See Issues for smaller contributions.
 
 If you're making changes to the MPSGraph part of the codebase, consider making your contributions to the single-file repo and then integrate the changes in the wrapped file in this repo. 
 

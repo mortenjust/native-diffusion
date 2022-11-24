@@ -11,7 +11,7 @@ import CoreGraphics
 public struct SampleInput {
     var prompt: String
     var negativePrompt: String
-    var initImage: CGImage?
+    var initImage: CGImage? { didSet { checkSize() }}
     var strength: Float?
     var seed: Int
     var steps: Int
@@ -36,7 +36,7 @@ public struct SampleInput {
     public init(
         prompt: String,
         negativePrompt: String = "",
-        initImage: CGImage,
+        initImage: CGImage?,
         strength: Float = 0.75,
         seed: Int = Int.random(in: 0...Int.max),
         steps: Int = 20,
@@ -49,6 +49,13 @@ public struct SampleInput {
         self.seed = seed
         self.steps = steps
         self.guidanceScale = guidanceScale
+    }
+    
+    private func checkSize() {
+        guard let initImage else { return }
+        if initImage.width != 512 || initImage.height != 512 {
+            assertionFailure("Please make sure your input image is exactly 512x512. You can use your own cropping mechanism, or the extension in NSImage:crop:to (macOS). Feel free to contribute a general solution. See Github issues for ideas.")
+        }
     }
 }
 

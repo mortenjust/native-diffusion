@@ -25,24 +25,13 @@ struct ContentView: View {
 
     var body: some View {
         VStack {
-            
             DiffusionImage(image: $image, inputImage: $inputImage, progress: $progress)
-            
             Spacer()
-            
             TextField("Prompt", text: $prompt)
             // 3
                 .onSubmit {
-//                    self.imagePublisher = sd.generate(prompt: prompt)
-                    
-                    let imageToUse = NSImage(contentsOfFile: "/Users/mortenjust/Desktop/resized.png")
-                    // ok, so this works, but my cgimage resizing does not. It's too tricky to debug
-                    // the most annoying thing is all the time i spent on writing view modifuckingfiers.
-                    // I could just change that to NSImage and be done with it. 
-                    
-                    
                     let input = SampleInput(prompt: prompt,
-                                            initImage: imageToUse!.cgImage(forProposedRect: nil, context: nil, hints: nil)!,
+                                            initImage: inputImage,
                                             steps: steps)
                     self.imagePublisher = sd.generate(input: input)
                     
@@ -63,7 +52,7 @@ struct ContentView: View {
             do {
                 try await sd.prepModels(remoteURL: path)
             } catch {
-                assertionFailure("Hi, developer. You most likely don't have a local webserver running that serves the zip file with the transformed model files. ")
+                assertionFailure("Hi, developer. You most likely don't have a local webserver running that serves the zip file with the transformed model files. See README.md")
             }
         }
         

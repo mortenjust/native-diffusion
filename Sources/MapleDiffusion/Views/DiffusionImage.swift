@@ -20,7 +20,7 @@ public struct DiffusionImage : View {
     
     public init(image: Binding<CGImage?>,
                 inputImage: Binding<CGImage?>? = nil,
-                progress: Binding<Double>,
+                progress: Binding<Double>,c
                 label: String = "Generated Image",
                 draggable: Bool = true)
     {
@@ -37,26 +37,36 @@ public struct DiffusionImage : View {
     }
     
     public var body: some View {
-        VStack {
+        
+        ZStack {
+            if let i = inputImage?.wrappedValue {
+                Image(i, scale: 1, label: Text("Input image"))
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            }
             if let image {
-                
                 Image(image, scale: 1, label: Text(label))
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-//                    .blur(radius: inputImage == nil ? ((1 - sqrt(progress)) * 600) : 0 )
-                    .animation(.default, value: progress)
+                    .animation(nil)
+                    .blur(radius: (1 - sqrt(progress)) * 100 )
+                    .blendMode(progress < 1 ? .sourceAtop : .normal)
+                    .animation(.linear(duration: 1), value: progress)
                     .clipShape(Rectangle())
 #if os(macOS)
                     .draggable(enabled: enableDrag, image: image)
 #endif
             }
         }
+           
 #if os(macOS)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .imageDroppable() { image in
-            print("di got image", image, "now setting to image")
-            self.inputImage?.wrappedValue = image.scale(targetSize: CGSize(width: 512, height: 512))
-            self.image = inputImage?.wrappedValue
+            let ns = NSImage(cgImage: image, size: .init(width: image.width, height: image.height))
+            let cropped = ns.crop(to: .init(width: 512, height: 512))
+            let cg = cropped.cgImage
+            self.inputImage?.wrappedValue = cg
+            self.image = nil
         }
 #endif
     }
