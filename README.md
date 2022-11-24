@@ -112,8 +112,10 @@ Add `https://github.com/mortenjust/native-diffusion` in the ["Swift Package Mana
 # Preparing the weights
 Native Diffusion splits the weights into a binary format that is different from the typical CKPT format. It uses many small files which it then (optionally) swaps in and out of memory, enabling it to run on both macOS and iOS. You can use the converter script in the package to convert your own CKPT file. 
 
-## Option 1: Pre-converted Standard Stable Diffusion v1.4
-By downloading this zip file, you accept the [creative license from StabilityAI](https://github.com/CompVis/stable-diffusion/blob/main/LICENSE). [Download ZIP](https://drive.google.com/file/d/1fGPc7-1upu-b68jstdT1vF7uWICc6Vk8/view?usp=sharing). Please don't use this URL in your software. 
+## Option 1: Pre-converted Standard Stable Diffusion v1.5
+By downloading this zip file, you accept the [creative license from StabilityAI](https://github.com/CompVis/stable-diffusion/blob/main/LICENSE). 
+
+[Download ZIP](https://drive.google.com/file/d/1EU_qxlF-p6XrxsoACvcI2CAmu45NphAC/view?usp=share_link). Please don't use this URL in your software. 
 
 We'll get back to what to do with it in a second.  
 
